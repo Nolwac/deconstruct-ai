@@ -1040,3 +1040,28 @@ body {
     padding: 24px;
   }
 }
+
+/* Carousel Slide Controllers */
+.carousel-controller-deck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 15px;
+  animation: fadeIn var(--transition-fast);
+}
+
+.slide-indicator-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+  padding: 6px 14px;
+  border-radius: 50px;
+  border: 1px solid var(--border-color);
+}
+

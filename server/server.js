@@ -160,128 +160,121 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 app.post('/api/designs/generate', authenticateToken, async (req, res) => {
   const {
     designType,
-    referenceImageUrl,
-    referenceImageFile,
-    userAssetUrl,
-    userAssetFile,
-    userCopyText,
-    brandPalette
+    userCopyTexts,
+    brandPalette,
+    referenceImageUrls,
+    referenceImageFiles,
+    userAssetUrls,
+    userAssetFiles
   } = req.body;
 
-  if (!designType || !userCopyText) {
-    return res.status(400).json({ message: 'Design type and caption copy text are required.' });
+  if (!designType || !userCopyTexts || !Array.isArray(userCopyTexts) || userCopyTexts.length === 0) {
+    return res.status(400).json({ message: 'Design type and caption copy texts array are required.' });
   }
 
-  // Create layout rules schema simulating Flowise & Pinecone outputs
   const templateId = 'tpl_' + Math.random().toString(36).substr(2, 9);
-  
-  // Setup color palettes based on user selections or preset defaults
   const customPalette = brandPalette && brandPalette.length > 0
     ? brandPalette
     : ['#1e293b', '#6366f1', '#10b981', '#ffffff'];
 
-  // Default coordinate schemas based on design dimensions
-  let layoutSchema = {
-    type: designType,
-    canvasSize: { width: 1280, height: 720 }, // Default landscape (YouTube Thumbnail)
-    palette: customPalette,
-    textConfig: {
-      x: 100,
-      y: 360,
-      fontSize: 54,
-      fontWeight: 'bold',
-      fontFamily: 'Outfit, sans-serif',
-      color: '#ffffff',
-      align: 'left',
-      maxWidth: 600,
-      lineHeight: 68
-    },
-    assetConfig: {
-      x: 800,
-      y: 110,
-      width: 400,
-      height: 500,
-      borderRadius: 16
-    }
-  };
+  // Determine slide count based on inputs
+  const totalSlides = Math.max(
+    userCopyTexts.length,
+    (userAssetFiles ? userAssetFiles.length : 0) + (userAssetUrls ? userAssetUrls.length : 0),
+    (referenceImageFiles ? referenceImageFiles.length : 0) + (referenceImageUrls ? referenceImageUrls.length : 0),
+    1
+  );
 
-  // Adjust coordinates based on selected Aspect Ratios/Types
-  if (designType === 'LinkedIn Carousel') {
-    layoutSchema.canvasSize = { width: 1080, height: 1080 }; // Square
-    layoutSchema.textConfig = {
-      x: 540,
-      y: 500,
-      fontSize: 48,
-      fontWeight: 'bold',
-      fontFamily: 'Inter, sans-serif',
-      color: '#ffffff',
-      align: 'center',
-      maxWidth: 900,
-      lineHeight: 64
-    };
-    layoutSchema.assetConfig = {
-      x: 390,
-      y: 120,
-      width: 300,
-      height: 300,
-      borderRadius: 150 // Circular avatar
-    };
-  } else if (designType === 'Event Flyer') {
-    layoutSchema.canvasSize = { width: 1080, height: 1350 }; // Portrait
-    layoutSchema.textConfig = {
-      x: 540,
-      y: 250,
-      fontSize: 60,
-      fontWeight: '900',
-      fontFamily: 'Outfit, sans-serif',
-      color: '#ffffff',
-      align: 'center',
-      maxWidth: 950,
-      lineHeight: 76
-    };
-    layoutSchema.assetConfig = {
-      x: 140,
-      y: 450,
-      width: 800,
-      height: 750,
-      borderRadius: 24
-    };
-  } else if (designType === 'Twitter Banner') {
-    layoutSchema.canvasSize = { width: 1500, height: 500 }; // Wide
-    layoutSchema.textConfig = {
-      x: 120,
-      y: 250,
-      fontSize: 46,
-      fontWeight: 'bold',
-      fontFamily: 'Inter, sans-serif',
-      color: '#ffffff',
-      align: 'left',
-      maxWidth: 700,
-      lineHeight: 60
-    };
-    layoutSchema.assetConfig = {
-      x: 1000,
-      y: 75,
-      width: 350,
-      height: 350,
-      borderRadius: 175
-    };
+  const slidesArray = [];
+
+  for (let i = 0; i < totalSlides; i++) {
+    // Determine geometry defaults based on type
+    let canvasSize = { width: 1280, height: 720 };
+    if (designType === 'LinkedIn Carousel') canvasSize = { width: 1080, height: 1080 };
+    else if (designType === 'Event Flyer') canvasSize = { width: 1080, height: 1350 };
+    else if (designType === 'Twitter Banner') canvasSize = { width: 1500, height: 500 };
+
+    // Dynamic layout coordinates per slide to create standard carousel pagination visual variations
+    let textConfig = {};
+    let assetConfig = {};
+
+    const layoutStylePattern = i % 3;
+
+    if (designType === 'LinkedIn Carousel') {
+      if (layoutStylePattern === 0) {
+        // Cover Page: Centered layout, large avatar/image at top
+        textConfig = { x: 540, y: 650, fontSize: 50, fontWeight: 'bold', fontFamily: 'Inter, sans-serif', color: '#ffffff', align: 'center', maxWidth: 900, lineHeight: 68 };
+        assetConfig = { x: 390, y: 150, width: 300, height: 300, borderRadius: 150 };
+      } else if (layoutStylePattern === 1) {
+        // Slide Left: Asset on the left, copy text on the right
+        textConfig = { x: 520, y: 540, fontSize: 44, fontWeight: 'bold', fontFamily: 'Inter, sans-serif', color: '#ffffff', align: 'left', maxWidth: 500, lineHeight: 58 };
+        assetConfig = { x: 80, y: 340, width: 380, height: 380, borderRadius: 24 };
+      } else {
+        // Slide Right: Copy text on the left, asset on the right
+        textConfig = { x: 80, y: 540, fontSize: 44, fontWeight: 'bold', fontFamily: 'Inter, sans-serif', color: '#ffffff', align: 'left', maxWidth: 500, lineHeight: 58 };
+        assetConfig = { x: 620, y: 340, width: 380, height: 380, borderRadius: 24 };
+      }
+    } else if (designType === 'Event Flyer') {
+      if (layoutStylePattern === 0) {
+        textConfig = { x: 540, y: 250, fontSize: 60, fontWeight: '900', fontFamily: 'Outfit, sans-serif', color: '#ffffff', align: 'center', maxWidth: 950, lineHeight: 76 };
+        assetConfig = { x: 140, y: 450, width: 800, height: 750, borderRadius: 24 };
+      } else {
+        textConfig = { x: 140, y: 350, fontSize: 52, fontWeight: '800', fontFamily: 'Outfit, sans-serif', color: '#ffffff', align: 'left', maxWidth: 800, lineHeight: 68 };
+        assetConfig = { x: 140, y: 580, width: 800, height: 650, borderRadius: 24 };
+      }
+    } else if (designType === 'Twitter Banner') {
+      if (layoutStylePattern === 0) {
+        textConfig = { x: 120, y: 250, fontSize: 46, fontWeight: 'bold', fontFamily: 'Inter, sans-serif', color: '#ffffff', align: 'left', maxWidth: 700, lineHeight: 60 };
+        assetConfig = { x: 1000, y: 75, width: 350, height: 350, borderRadius: 175 };
+      } else {
+        textConfig = { x: 780, y: 250, fontSize: 46, fontWeight: 'bold', fontFamily: 'Inter, sans-serif', color: '#ffffff', align: 'left', maxWidth: 650, lineHeight: 60 };
+        assetConfig = { x: 150, y: 75, width: 350, height: 350, borderRadius: 175 };
+      }
+    } else {
+      // Default YouTube Thumbnail layouts
+      if (layoutStylePattern === 0) {
+        textConfig = { x: 100, y: 360, fontSize: 54, fontWeight: 'bold', fontFamily: 'Outfit, sans-serif', color: '#ffffff', align: 'left', maxWidth: 600, lineHeight: 68 };
+        assetConfig = { x: 800, y: 110, width: 400, height: 500, borderRadius: 16 };
+      } else {
+        textConfig = { x: 680, y: 360, fontSize: 54, fontWeight: 'bold', fontFamily: 'Outfit, sans-serif', color: '#ffffff', align: 'left', maxWidth: 550, lineHeight: 68 };
+        assetConfig = { x: 100, y: 110, width: 400, height: 500, borderRadius: 16 };
+      }
+    }
+
+    const slideCopyText = userCopyTexts[i] || userCopyTexts[0] || 'Deconstruct AI Layout';
+    const slideAssetFile = userAssetFiles && userAssetFiles.length > 0
+      ? (userAssetFiles[i] || userAssetFiles[0])
+      : null;
+    const slideAssetUrl = userAssetUrls && userAssetUrls.length > 0
+      ? (userAssetUrls[i] || userAssetUrls[0])
+      : null;
+
+    slidesArray.push({
+      slideIndex: i,
+      userCopyText: slideCopyText,
+      userAssetFile: slideAssetFile,
+      userAssetUrl: slideAssetUrl,
+      layoutSchema: {
+        type: designType,
+        canvasSize,
+        palette: customPalette,
+        textConfig,
+        assetConfig
+      }
+    });
   }
 
-  // Create design project record
+  // Create composite design record
   const newDesign = {
     id: 'dsg_' + Math.random().toString(36).substr(2, 9),
     userId: req.user.id,
     designType,
-    userCopyText,
-    layoutSchema,
+    userCopyText: userCopyTexts.join(' | '),
+    slides: slidesArray,
     templateId,
-    userAssetUrl: userAssetUrl || 'Uploaded File',
-    referenceImageUrl: referenceImageUrl || 'Uploaded File',
     createdAt: new Date().toISOString()
   };
 
-  // Persist record
   const designs = readDb(DESIGNS_FILE);
   designs.push(newDesign);
   writeDb(DESIGNS_FILE, designs);
@@ -291,10 +284,10 @@ app.post('/api/designs/generate', authenticateToken, async (req, res) => {
     designId: newDesign.id,
     userId: req.user.id,
     templateId,
-    designType
+    designType,
+    slideCount: totalSlides
   });
 
-  // Return the layout schema config
   res.status(200).json({
     message: 'Design generated successfully.',
     design: newDesign

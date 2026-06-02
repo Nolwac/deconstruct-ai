@@ -6,14 +6,16 @@ const state = {
   username: localStorage.getItem('username') || null,
   activeRefSource: 'file', // 'file' | 'url'
   activeAssetSource: 'file', // 'file' | 'url'
-  refFileBase64: null,
-  assetFileBase64: null,
+  refFilesBase64: [],
+  assetFilesBase64: [],
   generatedImageBlob: null,
   activeDesignType: 'YouTube Thumbnail',
   history: [],
   canvasZoom: 1.0,
   isGridVisible: true,
-  currentDesign: null
+  currentDesign: null,
+  activeSlideIndex: 0,
+  totalSlidesCount: 1
 };
 
 // API Endpoint configuration
@@ -198,24 +200,30 @@ function switchSourceInput(type, source) {
 }
 
 function handleFileSelected(type, input) {
-  const file = input.files[0];
+  const files = Array.from(input.files);
   const label = document.getElementById(`${type}-file-name`);
   
-  if (!file) {
+  if (files.length === 0) {
     label.textContent = '';
-    if (type === 'ref') state.refFileBase64 = null;
-    if (type === 'asset') state.assetFileBase64 = null;
+    if (type === 'ref') state.refFilesBase64 = [];
+    if (type === 'asset') state.assetFilesBase64 = [];
     return;
   }
   
-  label.textContent = `Selected: ${file.name}`;
+  label.textContent = `Selected: ${files.length} file(s)`;
   
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    if (type === 'ref') state.refFileBase64 = e.target.result;
-    if (type === 'asset') state.assetFileBase64 = e.target.result;
-  };
-  reader.readAsDataURL(file);
+  const filePromises = files.map(file => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  });
+
+  Promise.all(filePromises).then(base64Array => {
+    if (type === 'ref') state.refFilesBase64 = base64Array;
+    if (type === 'asset') state.assetFilesBase64 = base64Array;
+  });
 }
 
 function updateDesignTypeSelection() {
@@ -254,26 +262,29 @@ async function handleGenerateDesign(e) {
   const textHighlightColorVal = document.getElementById('color-highlight').value;
   
   // Validate file uploads if they are toggled
-  if (state.activeRefSource === 'file' && !state.refFileBase64) {
-    alert('Please upload a style reference design template file.');
+  if (state.activeRefSource === 'file' && state.refFilesBase64.length === 0) {
+    alert('Please upload one or more style reference design templates.');
     return;
   }
-  if (state.activeAssetSource === 'file' && !state.assetFileBase64) {
-    alert('Please upload your asset photo.');
+  if (state.activeAssetSource === 'file' && state.assetFilesBase64.length === 0) {
+    alert('Please upload one or more asset photos.');
     return;
   }
+
+  // Parse captions (split by |)
+  const headlines = headlineVal.split('|').map(s => s.trim()).filter(Boolean);
 
   // Show dynamic stepping loader
   showLoader();
 
   const payload = {
     designType: state.activeDesignType,
-    userCopyText: headlineVal,
+    userCopyTexts: headlines,
     brandPalette: [bgColorVal, accentColorVal, textHighlightColorVal, '#ffffff'],
-    referenceImageUrl: state.activeRefSource === 'url' ? refUrlVal : null,
-    referenceImageFile: state.activeRefSource === 'file' ? state.refFileBase64 : null,
-    userAssetUrl: state.activeAssetSource === 'url' ? assetUrlVal : null,
-    userAssetFile: state.activeAssetSource === 'file' ? state.assetFileBase64 : null
+    referenceImageUrls: state.activeRefSource === 'url' ? [refUrlVal] : [],
+    referenceImageFiles: state.activeRefSource === 'file' ? state.refFilesBase64 : [],
+    userAssetUrls: state.activeAssetSource === 'url' ? [assetUrlVal] : [],
+    userAssetFiles: state.activeAssetSource === 'file' ? state.assetFilesBase64 : []
   };
 
   try {
@@ -304,7 +315,20 @@ async function handleGenerateDesign(e) {
 
     // Finalize Generation
     state.currentDesign = data.design;
-    await drawDesignOnCanvas(data.design, payload.userAssetFile || payload.userAssetUrl);
+    state.activeSlideIndex = 0;
+    state.totalSlidesCount = data.design.slides.length;
+    
+    // Toggle Carousel Controls visibility
+    const controls = document.getElementById('carousel-controls');
+    if (state.totalSlidesCount > 1) {
+      controls.classList.remove('hidden');
+      document.getElementById('carousel-slide-indicator').textContent = `Slide 1 of ${state.totalSlidesCount}`;
+    } else {
+      controls.classList.add('hidden');
+    }
+
+    const firstSlide = data.design.slides[0];
+    await drawDesignOnCanvas(data.design, firstSlide.userAssetFile || firstSlide.userAssetUrl);
     
     hideLoader();
     loadHistory(); // Refresh history panel
@@ -354,7 +378,9 @@ async function animateStep(stepIdx, duration) {
 // ----------------------------------------------------
 
 async function drawDesignOnCanvas(design, userAssetImageSource) {
-  const schema = design.layoutSchema;
+  // Get active slide schema or default to root schema
+  const slide = design.slides ? design.slides[state.activeSlideIndex] : design;
+  const schema = slide.layoutSchema;
   
   // Set dimensions based on extracted schema layout sizes
   renderCanvas.width = schema.canvasSize.width;
@@ -455,34 +481,30 @@ async function drawDesignOnCanvas(design, userAssetImageSource) {
   ctx.textAlign = schema.textConfig.align;
   ctx.textBaseline = 'middle';
 
-  const textLines = wrapText(ctx, design.userCopyText, schema.textConfig.maxWidth);
+  const textLines = wrapText(ctx, slide.userCopyText, schema.textConfig.maxWidth);
   let currentY = schema.textConfig.y - ((textLines.length - 1) * schema.textConfig.lineHeight) / 2;
 
   textLines.forEach(line => {
-    // Add glowing shadow effect under the text to highlight contrast
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetX = 2;
     ctx.shadowOffsetY = 2;
     
-    // Draw Text Stroke for high legibility
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4;
     ctx.strokeText(line, schema.textConfig.x, currentY);
     
-    // Fill text color
     ctx.fillText(line, schema.textConfig.x, currentY);
     currentY += schema.textConfig.lineHeight;
   });
 
-  // Reset shadow attributes
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
 
   // Draw overlay coordinate guidelines if toggled
-  drawCoordinateOverlayGrid(design);
+  drawCoordinateOverlayGrid(slide);
 
   // Enable download action
   downloadBtn.removeAttribute('disabled');
@@ -724,9 +746,24 @@ function renderHistoryList() {
 
 function loadHistoricalDesign(design) {
   state.currentDesign = design;
-  
+  state.activeSlideIndex = 0;
+  state.totalSlidesCount = design.slides ? design.slides.length : 1;
+
+  // Toggle Carousel Controls visibility
+  const controls = document.getElementById('carousel-controls');
+  if (state.totalSlidesCount > 1) {
+    controls.classList.remove('hidden');
+    document.getElementById('carousel-slide-indicator').textContent = `Slide 1 of ${state.totalSlidesCount}`;
+  } else {
+    controls.classList.add('hidden');
+  }
+
   // Update configuration form values
-  document.getElementById('headline-input').value = design.userCopyText;
+  if (design.slides) {
+    document.getElementById('headline-input').value = design.slides.map(s => s.userCopyText).join(' | ');
+  } else {
+    document.getElementById('headline-input').value = design.userCopyText;
+  }
   
   // Set active design type radio button
   const radios = document.getElementsByName('designType');
@@ -738,5 +775,21 @@ function loadHistoricalDesign(design) {
   });
 
   // Re-draw design with default asset avatar clip
-  drawDesignOnCanvas(design, null);
+  const slideToDraw = design.slides ? design.slides[0] : design;
+  drawDesignOnCanvas(design, slideToDraw.userAssetFile || slideToDraw.userAssetUrl);
+}
+
+// ----------------------------------------------------
+// Carousel Slide Navigation Helper
+// ----------------------------------------------------
+function navigateSlide(direction) {
+  if (!state.currentDesign || !state.currentDesign.slides) return;
+  
+  state.activeSlideIndex = (state.activeSlideIndex + direction + state.totalSlidesCount) % state.totalSlidesCount;
+  
+  // Update UI indicator
+  document.getElementById('carousel-slide-indicator').textContent = `Slide ${state.activeSlideIndex + 1} of ${state.totalSlidesCount}`;
+  
+  const activeSlide = state.currentDesign.slides[state.activeSlideIndex];
+  drawDesignOnCanvas(state.currentDesign, activeSlide.userAssetFile || activeSlide.userAssetUrl);
 }
