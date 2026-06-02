@@ -55,9 +55,9 @@ startProcess('WebApp', 'node', ['server/server.js']);
 startProcess('McpServer', 'node', ['mcp-server/index.js']);
 
 // 3. Flowise AI Chatflow Server (Port 3000)
-startProcess('Flowise', 'npx', ['flowise', 'start']);
+startProcess('Flowise', 'npx', ['-y', 'flowise', 'start']);
 
 // 4. n8n Orchestrator Server (Port 5678)
-startProcess('n8n', 'npx', ['n8n', 'start']);
+startProcess('n8n', 'npx', ['-y', 'n8n', 'start']);
 
 console.log('[Orchestrator] All background services spawned. Press Ctrl+C to terminate all services.');
