@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deconstruct AI — High-Fidelity Design Automation</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Vanilla CSS Design System -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dark-theme">
+
+  <!-- Background Ambient Glows -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- AUTH SECTION (Initially Visible) -->
+  <section id="auth-section" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="brand-logo">
+          <i class="fa-solid fa-compass-drafting brand-icon"></i>
+          <span>Deconstruct AI</span>
+        </div>
+        <p class="auth-tagline">Deconstruct layouts. Automate designs.</p>
+      </div>
+
+      <!-- Auth Switch Tabs -->
+      <div class="auth-tabs">
+        <button id="tab-login-btn" class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+        <button id="tab-register-btn" class="auth-tab" onclick="switchAuthTab('register')">Sign Up</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-username"><i class="fa-regular fa-user"></i> Username</label>
+          <input type="text" id="login-username" placeholder="Enter username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="login-password"><i class="fa-regular fa-lock"></i> Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary auth-submit-btn">
+          <span>Sign In</span> <i class="fa-solid fa-arrow-right-to-bracket"></i>
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="register-username"><i class="fa-regular fa-user"></i> Username</label>
+          <input type="text" id="register-username" placeholder="Create username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="register-password"><i class="fa-regular fa-lock"></i> Password</label>
+          <input type="password" id="register-password" placeholder="Create password" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary auth-submit-btn">
+          <span>Create Account</span> <i class="fa-solid fa-user-plus"></i>
+        </button>
+      </form>
+
+      <div id="auth-alert" class="alert hidden"></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD SECTION (Initially Hidden) -->
+  <section id="dashboard-section" class="dashboard-wrapper hidden">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <i class="fa-solid fa-compass-drafting brand-icon"></i>
+          <span>Deconstruct AI</span>
+        </div>
+      </div>
+
+      <!-- Active User Profile -->
+      <div class="user-profile">
+        <div class="avatar">
+          <span id="user-initials">U</span>
+        </div>
+        <div class="user-info">
+          <span id="username-display" class="user-name">User</span>
+          <span class="user-status"><i class="fa-solid fa-circle status-dot"></i> Authenticated</span>
+        </div>
+        <button id="logout-btn" onclick="handleLogout()" title="Logout" class="logout-icon-btn">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+
+      <!-- Navigation/History -->
+      <div class="sidebar-menu-section">
+        <h4 class="menu-title"><i class="fa-solid fa-history"></i> My Portfolio History</h4>
+        <div id="design-history-list" class="history-list">
+          <!-- Dynamically populated portfolio history cards -->
+          <div class="history-empty">
+            <i class="fa-regular fa-folder-open"></i>
+            <p>No designs generated yet</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Content -->
+    <main class="workspace">
+      <div class="workspace-header">
+        <h1>Design Workspace</h1>
+        <p>Analyze reference structures and overlay personalized text/assets in real time.</p>
+      </div>
+
+      <div class="workspace-grid">
+        <!-- Configuration Control Panel -->
+        <section class="control-panel glass-card">
+          <div class="panel-section-header">
+            <h3><i class="fa-solid fa-sliders"></i> Design Configuration</h3>
+          </div>
+
+          <form id="design-config-form" onsubmit="handleGenerateDesign(event)">
+            <!-- 1. Design Format Card List -->
+            <div class="form-group">
+              <label class="section-label">Select Layout Format</label>
+              <div class="design-type-grid">
+                <label class="design-type-card active">
+                  <input type="radio" name="designType" value="YouTube Thumbnail" checked onchange="updateDesignTypeSelection(this)">
+                  <i class="fa-brands fa-youtube"></i>
+                  <span class="card-title">YouTube Thumbnail</span>
+                  <span class="card-ratio">16:9 (1280x720)</span>
+                </label>
+                <label class="design-type-card">
+                  <input type="radio" name="designType" value="LinkedIn Carousel" onchange="updateDesignTypeSelection(this)">
+                  <i class="fa-brands fa-linkedin-in"></i>
+                  <span class="card-title">LinkedIn Post</span>
+                  <span class="card-ratio">1:1 (1080x1080)</span>
+                </label>
+                <label class="design-type-card">
+                  <input type="radio" name="designType" value="Event Flyer" onchange="updateDesignTypeSelection(this)">
+                  <i class="fa-regular fa-image"></i>
+                  <span class="card-title">Event Flyer</span>
+                  <span class="card-ratio">4:5 (1080x1350)</span>
+                </label>
+                <label class="design-type-card">
+                  <input type="radio" name="designType" value="Twitter Banner" onchange="updateDesignTypeSelection(this)">
+                  <i class="fa-brands fa-twitter"></i>
+                  <span class="card-title">Twitter Banner</span>
+                  <span class="card-ratio">3:1 (1500x500)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 2. Style Reference Image -->
+            <div class="form-group border-top">
+              <label class="section-label">1. Style Reference Design Template</label>
+              <div class="input-source-toggle">
+                <button type="button" id="ref-toggle-file" class="toggle-btn active" onclick="switchSourceInput('ref', 'file')">Upload File</button>
+                <button type="button" id="ref-toggle-url" class="toggle-btn" onclick="switchSourceInput('ref', 'url')">Image URL</button>
+              </div>
+
+              <div id="ref-file-container" class="file-upload-zone">
+                <input type="file" id="ref-file-input" accept="image/*" onchange="handleFileSelected('ref', this)">
+                <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                <p class="upload-text">Drag & drop or <span class="highlight">browse</span> template image</p>
+                <span id="ref-file-name" class="selected-file-name"></span>
+              </div>
+              <div id="ref-url-container" class="form-input-container hidden">
+                <input type="url" id="ref-url-input" class="text-input" placeholder="https://example.com/layout-sample.png">
+              </div>
+            </div>
+
+            <!-- 3. User Asset Image -->
+            <div class="form-group border-top">
+              <label class="section-label">2. Your Asset (Product/Avatar)</label>
+              <div class="input-source-toggle">
+                <button type="button" id="asset-toggle-file" class="toggle-btn active" onclick="switchSourceInput('asset', 'file')">Upload File</button>
+                <button type="button" id="asset-toggle-url" class="toggle-btn" onclick="switchSourceInput('asset', 'url')">Image URL</button>
+              </div>
+
+              <div id="asset-file-container" class="file-upload-zone">
+                <input type="file" id="asset-file-input" accept="image/*" onchange="handleFileSelected('asset', this)">
+                <i class="fa-solid fa-image upload-icon"></i>
+                <p class="upload-text">Drag & drop or <span class="highlight">browse</span> your asset photo</p>
+                <span id="asset-file-name" class="selected-file-name"></span>
+              </div>
+              <div id="asset-url-container" class="form-input-container hidden">
+                <input type="url" id="asset-url-input" class="text-input" placeholder="https://example.com/my-product.png">
+              </div>
+            </div>
+
+            <!-- 4. Typography Caption Text -->
+            <div class="form-group border-top">
+              <label for="headline-input" class="section-label">3. Target Text Copy (Headline)</label>
+              <textarea id="headline-input" class="text-area-input" rows="3" placeholder="Enter the design title or promo headline copy..." required></textarea>
+            </div>
+
+            <!-- 5. Brand Color Palette Customizer -->
+            <div class="form-group border-top">
+              <label class="section-label">4. Brand Palette Customizer (Optional)</label>
+              <p class="helper-text">Select background and theme highlights or let the model extract it.</p>
+              <div class="color-picker-row">
+                <div class="color-picker-item">
+                  <input type="color" id="color-bg" value="#0f172a">
+                  <span>Background</span>
+                </div>
+                <div class="color-picker-item">
+                  <input type="color" id="color-accent" value="#6366f1">
+                  <span>Accent</span>
+                </div>
+                <div class="color-picker-item">
+                  <input type="color" id="color-highlight" value="#10b981">
+                  <span>Text Highlight</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Action -->
+            <button type="submit" class="btn btn-primary btn-block submit-action-btn">
+              <i class="fa-solid fa-microchip"></i> Deconstruct & Generate
+            </button>
+          </form>
+        </section>
+
+        <!-- Preview Canvas Panel -->
+        <section class="preview-panel glass-card">
+          <div class="panel-section-header flex-between">
+            <h3><i class="fa-regular fa-eye"></i> Production Rendering Canvas</h3>
+            <div class="canvas-actions">
+              <button type="button" class="action-btn" onclick="zoomCanvas(0.1)" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+              <button type="button" class="action-btn" onclick="zoomCanvas(-0.1)" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+              <button type="button" class="action-btn" onclick="resetZoom()" title="Reset View"><i class="fa-solid fa-expand"></i></button>
+            </div>
+          </div>
+
+          <!-- Live Canvas Container -->
+          <div class="canvas-wrapper">
+            <div id="canvas-container" class="canvas-holder">
+              <!-- Render engine element -->
+              <canvas id="render-canvas" width="1280" height="720"></canvas>
+              
+              <!-- Transparent overlay mapping coordinates on top of the image -->
+              <div id="coordinate-grid-overlay" class="grid-overlay">
+                <!-- Visual boxes mapped dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Deck -->
+          <div class="preview-footer border-top">
+            <div class="export-actions">
+              <button id="download-design-btn" class="btn btn-secondary" onclick="downloadGeneratedDesign()" disabled>
+                <i class="fa-solid fa-download"></i> Download PNG
+              </button>
+              <button type="button" class="btn btn-tertiary" onclick="toggleCoordinateGrid()">
+                <i class="fa-solid fa-border-none"></i> Toggle Grid Overlays
+              </button>
+            </div>
+            <!-- Live Info Log -->
+            <div class="meta-status">
+              <span id="canvas-ratio-badge" class="meta-badge"><i class="fa-solid fa-crop-simple"></i> Ratio: 16:9</span>
+              <span id="system-status-badge" class="meta-badge online"><i class="fa-solid fa-server"></i> System Online</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </section>
+
+  <!-- HIGH FIDELITY PROCESS STEP MODAL (Initially Hidden) -->
+  <div id="loader-overlay" class="loader-overlay hidden">
+    <div class="loader-card glass-card">
+      <div class="spinner-container">
+        <div class="custom-spinner"></div>
+      </div>
+      <h3>Deconstructing & Reassembling Layout...</h3>
+      <p class="loader-subtext">Running unified orchestration via n8n & Flowise chatflows</p>
+      
+      <!-- Stepper Phases -->
+      <ul class="stepper-list">
+        <li id="step-0" class="step-item active">
+          <i class="fa-solid fa-circle-notch fa-spin step-icon"></i>
+          <span>Uploading assets and firing n8n Webhook</span>
+        </li>
+        <li id="step-1" class="step-item">
+          <i class="fa-regular fa-circle step-icon"></i>
+          <span>Vision LLM extracting layout structure rules</span>
+        </li>
+        <li id="step-2" class="step-item">
+          <i class="fa-regular fa-circle step-icon"></i>
+          <span>Syncing rule embeddings to Pinecone Vector Index</span>
+        </li>
+        <li id="step-3" class="step-item">
+          <i class="fa-regular fa-circle step-icon"></i>
+          <span>Compositing elements programmatically onto rendering canvas</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
