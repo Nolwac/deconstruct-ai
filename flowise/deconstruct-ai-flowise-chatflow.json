@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "visionLLM_0",
+      "label": "ChatOpenAI / Gemini Vision",
+      "name": "chatOpenAI",
+      "version": 4.0,
+      "type": "ChatOpenAI",
+      "position": {
+        "x": 150,
+        "y": 200
+      },
+      "inputs": {
+        "modelName": "gpt-4o",
+        "temperature": 0.1
+      }
+    },
+    {
+      "id": "pinecone_0",
+      "label": "Pinecone Vector Store",
+      "name": "pinecone",
+      "version": 1.0,
+      "type": "Pinecone",
+      "position": {
+        "x": 480,
+        "y": 350
+      },
+      "inputs": {
+        "pineconeIndex": "graphics-templates",
+        "namespace": "rulesets"
+      }
+    },
+    {
+      "id": "customAgent_0",
+      "label": "Layout Analysis & Router Agent",
+      "name": "customAgent",
+      "version": 1.0,
+      "type": "CustomAgent",
+      "position": {
+        "x": 450,
+        "y": 50
+      },
+      "inputs": {
+        "systemMessage": "You are an expert layout extraction mechanism. If a template ID is provided, query the Pinecone Vector Store node to fetch the stored style rules. If no template ID is provided, analyze the reference image structure. Extract: Color palette arrays, Layout coordinate bounding structures, and typographical sizes. Generate a clean Styliza Rule Schema JSON object. Pass the resulting schema to the Layout Optimizer node.",
+        "tools": ["pinecone_0"],
+        "model": "visionLLM_0"
+      }
+    },
+    {
+      "id": "layoutOptimizer_0",
+      "label": "Layout Optimizer LLM",
+      "name": "structuredOutputNode",
+      "version": 2.0,
+      "type": "StructuredOutput",
+      "position": {
+        "x": 800,
+        "y": 180
+      },
+      "inputs": {
+        "systemPrompt": "You are a graphic layout balance optimizer. Verify that the incoming layout rules schema holds sound spatial values, grid proportions, and valid hex keys. Fix overlapping coordinates, then output the final verified JSON schema string without markdown wrapper syntax.",
+        "model": "visionLLM_0"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "visionLLM_0",
+      "sourceHandle": "chatOpenAI",
+      "target": "customAgent_0",
+      "targetHandle": "model"
+    },
+    {
+      "source": "pinecone_0",
+      "sourceHandle": "pinecone",
+      "target": "customAgent_0",
+      "targetHandle": "tools"
+    },
+    {
+      "source": "customAgent_0",
+      "sourceHandle": "customAgent",
+      "target": "layoutOptimizer_0",
+      "targetHandle": "input"
+    }
+  ]
+}

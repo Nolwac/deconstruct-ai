@@ -1,0 +1,167 @@
+{
+  "name": "AI Graphics Designer Tool - Core Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "design-request",
+        "options": {}
+      },
+      "id": "e6097d8b-b892-491c-b6a1-a201fa5c9b11",
+      "name": "Webhook Node (Start)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/v1/prediction/YOUR_FLOWWISE_CHATFLOW_ID",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"question\": \"Analyze or retrieve layout schema\",\n  \"overrideConfig\": {\n    \"vars\": {\n      \"templateId\": \"{{ $json.body?.templateId || '' }}\",\n      \"referenceImageUrl\": \"{{ $json.body?.referenceImageUrl || '' }}\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "c05561b3-3f11-477c-a492-df6bfbda8d9d",
+      "name": "Call Flowise Layer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [320, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5001/mcp/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event\": \"design_request_processing\",\n  \"user_context\": \"agents\",\n  \"flowise_response\": {{ JSON.stringify($json.text) }}\n}",
+        "options": {}
+      },
+      "id": "fa2277d1-1209-4099-b101-707b61a9cf01",
+      "name": "MCP Server Handshake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [540, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "const flowiseData = typeof $('Call Flowise Layer').item.json.text === 'string' \n  ? JSON.parse($('Call Flowise Layer').item.json.text) \n  : $('Call Flowise Layer').item.json.text;\n\nconst userCopy = $('Webhook Node (Start)').item.json.body.userCopyText;\nconst userAsset = $('Webhook Node (Start)').item.json.body.userAssetUrl;\n\nconst compiledPrompt = `Generate a high-quality professional design based strictly on this layout rule schema: ${JSON.stringify(flowiseData)}. Modify the design by embedding this specific text copy content: \"${userCopy}\". Seamlessly incorporate this primary asset photo: ${userAsset}. Ensure typography matches the extracted visual rules alignment perfectly, keeping high legibility and maintaining layout consistency.`;\n\nreturn [{ json: { compiledPrompt } }];"
+      },
+      "id": "a189f76c-d231-419b-bb9c-ccf22fa9831a",
+      "name": "Prompt Engineering Node",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 240]
+    },
+    {
+      "parameters": {
+        "model": "dall-e-3",
+        "prompt": "={{ $json.compiledPrompt }}",
+        "options": {
+          "responseFormat": "b64_json",
+          "size": "1024x1024"
+        }
+      },
+      "id": "b34aa9f7-9cde-4712-a1b9-379da109f29a",
+      "name": "Image Generation Model Node",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [980, 240],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIALS_ID",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "image/png"
+              }
+            ]
+          }
+        }
+      },
+      "id": "d043abcf-8f12-4217-a00d-f2ef99bf8a89",
+      "name": "Respond to Webhook (UI Display)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 240]
+    }
+  ],
+  "connections": {
+    "Webhook Node (Start)": {
+      "main": [
+        [
+          {
+            "node": "Call Flowise Layer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Flowise Layer": {
+      "main": [
+        [
+          {
+            "node": "MCP Server Handshake",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prompt Engineering Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Engineering Node": {
+      "main": [
+        [
+          {
+            "node": "Image Generation Model Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image Generation Model Node": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (UI Display)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
