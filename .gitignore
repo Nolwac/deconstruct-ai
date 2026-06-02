@@ -3,6 +3,9 @@ node_modules/
 jspm_packages/
 web_modules/
 
+# Simulated JSON databases
+server/*.json
+
 # Logs
 logs
 *.log

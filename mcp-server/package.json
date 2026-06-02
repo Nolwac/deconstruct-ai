@@ -1,0 +1,13 @@
+{
+  "name": "deconstruct-ai-mcp-server",
+  "version": "1.0.0",
+  "description": "Hybrid MCP Server (HTTP & Stdio) for Deconstruct AI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: flowise
+    restart: always
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - flowise_data:/root/.flowise
+    networks:
+      - deconstruct_net
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - deconstruct_net
+
+volumes:
+  flowise_data:
+  n8n_data:
+
+networks:
+  deconstruct_net:
+    driver: bridge
