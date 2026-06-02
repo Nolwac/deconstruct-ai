@@ -114,8 +114,8 @@ async function runTests() {
   // Test 4: Design Generation Node
   console.log('\nTest 4: Design Generation (/api/designs/generate)...');
   const designPayload = {
-    designType: 'YouTube Thumbnail',
-    userCopyText: 'Verify Test Headline Text',
+    designType: 'LinkedIn Carousel',
+    userCopyTexts: ['Verify Slide 1 Caption', 'Verify Slide 2 Caption', 'Verify Slide 3 Caption'],
     brandPalette: ['#1e293b', '#6366f1', '#10b981', '#ffffff']
   };
 
@@ -129,10 +129,14 @@ async function runTests() {
   });
   
   const genData = await genRes.json();
-  if (genRes.status !== 200 || !genData.design || genData.design.userCopyText !== designPayload.userCopyText) {
+  const joinedText = designPayload.userCopyTexts.join(' | ');
+  if (genRes.status !== 200 || !genData.design || genData.design.userCopyText !== joinedText) {
     throw new Error(`Design generation failed: ${JSON.stringify(genData)}`);
   }
-  console.log('✔ Design layout schema generated & stored.');
+  if (!genData.design.slides || genData.design.slides.length !== 3) {
+    throw new Error(`Design slides structure error: ${JSON.stringify(genData.design.slides)}`);
+  }
+  console.log('✔ Design layout schemas (3 slides) generated & stored.');
 
   // Test 5: Design History Retrieve
   console.log('\nTest 5: History portfolio lookup (/api/designs/history)...');
@@ -145,7 +149,7 @@ async function runTests() {
     throw new Error(`Portfolio retrieval failed: ${JSON.stringify(historyData)}`);
   }
   
-  if (historyData[0].userCopyText !== designPayload.userCopyText) {
+  if (historyData[0].userCopyText !== joinedText) {
     throw new Error(`Data mismatch in retrieved portfolio card: ${historyData[0].userCopyText}`);
   }
   console.log('✔ Portfolio history validation completed successfully.');
