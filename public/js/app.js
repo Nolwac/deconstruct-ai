@@ -396,6 +396,15 @@ async function drawDesignOnCanvas(design, userAssetImageSource) {
   renderCanvas.width = schema.canvasSize.width;
   renderCanvas.height = schema.canvasSize.height;
   
+  if (slide.generatedImageUrl) {
+    const generated = await loadImage(slide.generatedImageUrl);
+    ctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
+    ctx.drawImage(generated, 0, 0, renderCanvas.width, renderCanvas.height);
+    coordinateGridOverlay.innerHTML = '';
+    downloadBtn.removeAttribute('disabled');
+    return;
+  }
+
   // Draw Background Layer
   const grad = ctx.createLinearGradient(0, 0, renderCanvas.width, renderCanvas.height);
   grad.addColorStop(0, schema.palette[0] || '#0f172a');

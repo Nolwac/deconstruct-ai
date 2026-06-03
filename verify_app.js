@@ -147,7 +147,7 @@ async function runTests() {
   if (!genData.design.slides || genData.design.slides.length !== 3) {
     throw new Error(`Design slides structure error: ${JSON.stringify(genData.design.slides)}`);
   }
-  if (genData.design.generation?.strategy !== 'n8n-flowise-orchestrated-schema-render') {
+  if (!String(genData.design.generation?.strategy || '').startsWith('n8n-flowise')) {
     throw new Error(`Generation strategy should be orchestrated: ${genData.design.generation?.strategy}`);
   }
   if (!genData.design.generation?.integrations?.n8n?.ok) {
@@ -185,7 +185,7 @@ async function runTests() {
   if (thumbData.design.intent.reason.includes('carousel')) {
     throw new Error(`Thumbnail intent reason should not classify as carousel: ${JSON.stringify(thumbData.design.intent)}`);
   }
-  if (thumbData.design.generation?.strategy !== 'n8n-flowise-orchestrated-schema-render') {
+  if (!String(thumbData.design.generation?.strategy || '').startsWith('n8n-flowise')) {
     throw new Error(`Thumbnail generation strategy should be orchestrated: ${thumbData.design.generation?.strategy}`);
   }
   if (!thumbData.design.generation?.integrations?.n8n?.ok) {

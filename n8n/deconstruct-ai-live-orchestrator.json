@@ -66,7 +66,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { event: 'n8n_flowise_orchestration', source: 'n8n', flowiseSource: $json.source, chatflowId: $json.chatflowId, mode: $json.mode, slideCount: $json.slideCount, timestamp: new Date().toISOString() } }}",
+        "jsonBody": "={{ { event: 'n8n_flowise_gemini_orchestration', source: 'n8n', flowiseSource: $('Call Flowise Layout Rules').first().json.source, geminiImage: Boolean(($('Call Gemini Image Model').first().json.candidates?.[0]?.content?.parts || []).find(p => p.inlineData)), timestamp: new Date().toISOString() } }}",
         "options": {}
       },
       "id": "33333333-cccc-4ccc-8ccc-333333333333",
@@ -74,20 +74,49 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        580,
+        820,
         240
       ]
     },
     {
       "parameters": {
-        "jsCode": "const flowise = $('Call Flowise Layout Rules').first().json;\nreturn [{ json: { source: 'n8n-live-orchestrator', n8nWorkflow: 'Deconstruct AI Live Orchestrator', flowise, evidence: { n8n: true, flowise: flowise.source === 'flowise-chatflow', flowiseChatflowId: flowise.chatflowId, mcpLogged: true, timestamp: new Date().toISOString() } } }];"
+        "jsCode": "const flowise = $('Call Flowise Layout Rules').first().json;\nconst gemini = $('Call Gemini Image Model').first().json;\nconst parts = gemini?.candidates?.[0]?.content?.parts || [];\nconst imagePart = parts.find(p => p.inlineData);\nconst textPart = parts.find(p => p.text);\nreturn [{ json: { source: 'n8n-live-orchestrator', n8nWorkflow: 'Deconstruct AI Live Orchestrator', flowise, gemini: { attempted: true, ok: Boolean(imagePart), model: 'gemini-2.5-flash-image', text: textPart?.text || null, image: imagePart ? { mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data } : null }, evidence: { n8n: true, flowise: flowise.source === 'flowise-chatflow', gemini: Boolean(imagePart), flowiseChatflowId: flowise.chatflowId, mcpLogged: true, timestamp: new Date().toISOString() } } }];"
       },
       "id": "44444444-dddd-4ddd-8ddd-444444444444",
       "name": "Return Orchestrated Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        820,
+        1060,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n      const body = $('Design Request Webhook').first().json.body || {};\n      const flowise = $('Call Flowise Layout Rules').first().json || {};\n      const text = body.caption || (body.userCopyTexts || [''])[0] || '';\n      const designType = body.designType || 'design';\n      return {\n        contents: [{\n          parts: [{\n            text: 'Create a polished, production-quality ' + designType + ' with exact visible text: \"' + text + '\". Use these layout rules from Flowise: ' + JSON.stringify(flowise.layoutRules || {}) + '. Output a real AI-generated marketing graphic, not a schema, mockup, wireframe, placeholder, or flat canvas render.'\n          }]\n        }],\n        generationConfig: { responseModalities: ['TEXT','IMAGE'] }\n      };\n    })() }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "55555555-eeee-4eee-8eee-555555555555",
+      "name": "Call Gemini Image Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
         240
       ]
     }
@@ -108,7 +137,7 @@
       "main": [
         [
           {
-            "node": "Log Orchestration Evidence",
+            "node": "Call Gemini Image Model",
             "type": "main",
             "index": 0
           }
@@ -120,6 +149,17 @@
         [
           {
             "node": "Return Orchestrated Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini Image Model": {
+      "main": [
+        [
+          {
+            "node": "Log Orchestration Evidence",
             "type": "main",
             "index": 0
           }

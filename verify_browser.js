@@ -66,7 +66,7 @@ async function main() {
     assert(thumbPayload.design.mode === 'single', 'Thumbnail should be single mode.');
     assert(thumbPayload.design.slides.length === 1, 'Thumbnail should render one output slide.');
     assert(thumbPayload.design.slides[0].assets.length === 2, 'Thumbnail should keep two asset placements.');
-    assert(thumbPayload.design.generation?.strategy === 'n8n-flowise-orchestrated-schema-render', 'Thumbnail should be n8n/Flowise orchestrated.');
+    assert(String(thumbPayload.design.generation?.strategy || '').startsWith('n8n-flowise'), 'Thumbnail should be n8n/Flowise orchestrated.');
     assert(thumbPayload.design.generation?.integrations?.n8n?.ok === true, 'Thumbnail n8n orchestration must succeed.');
     assert(thumbPayload.design.generation?.integrations?.flowise?.ok === true, 'Thumbnail Flowise orchestration must succeed.');
     assert(await page.locator('#carousel-controls.hidden').count() === 1, 'Carousel controls should be hidden for thumbnail.');
@@ -90,7 +90,7 @@ async function main() {
     await page.waitForFunction(() => window.deconstructState?.currentDesign?.slides?.length === 3, null, { timeout: 12000 });
     assert(carouselPayload.design.mode === 'carousel', 'LinkedIn selected format should be carousel mode.');
     assert(carouselPayload.design.slides.length === 3, 'Carousel should produce three slides.');
-    assert(carouselPayload.design.generation?.strategy === 'n8n-flowise-orchestrated-schema-render', 'Carousel should be n8n/Flowise orchestrated.');
+    assert(String(carouselPayload.design.generation?.strategy || '').startsWith('n8n-flowise'), 'Carousel should be n8n/Flowise orchestrated.');
     assert(carouselPayload.design.generation?.integrations?.n8n?.ok === true, 'Carousel n8n orchestration must succeed.');
     assert(carouselPayload.design.generation?.integrations?.flowise?.ok === true, 'Carousel Flowise orchestration must succeed.');
     assert(await page.locator('#carousel-controls:not(.hidden)').count() === 1, 'Carousel controls should be visible.');

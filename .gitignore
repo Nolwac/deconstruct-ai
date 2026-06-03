@@ -9,6 +9,10 @@ server/*.json
 # Logs
 logs
 *.log
+
+# Generated image outputs
+server/generated_images/
+generated_images/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

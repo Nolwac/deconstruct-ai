@@ -144,55 +144,15 @@ function normalizeSources(files, urls) {
   return [...asArray(files), ...asArray(urls)];
 }
 
-async function maybeCallGeminiImageGeneration({ prompt = null, designType = 'Design' } = {}) {
-  if (process.env.ENABLE_REAL_IMAGE_GENERATION !== 'true') {
-    return { attempted: false, ok: false, provider: 'gemini', reason: 'disabled-to-protect-budget' };
-  }
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return { attempted: false, ok: false, provider: 'gemini', reason: 'GEMINI_API_KEY missing' };
-  }
-  const cap = parseInt(process.env.GEMINI_DAILY_CAP || '10', 10);
-  const trackerFile = path.join(__dirname, '../logs', 'gemini_daily_calls.json');
-  const today = new Date().toISOString().split('T')[0];
-  let tracker = {};
-  try { if (fs.existsSync(trackerFile)) tracker = JSON.parse(fs.readFileSync(trackerFile, 'utf8')); } catch (e) {}
-  const callsToday = (tracker[today] || 0);
-  if (callsToday >= cap) {
-    return { attempted: false, ok: false, provider: 'gemini', reason: `daily-cap-reached (${callsToday}/${cap})` };
-  }
-  try {
-    const payload = {
-      contents: [{ parts: [{ text: prompt || `Generate a ${designType} image` }] }],
-      generationConfig: { responseMimeType: 'image/png' }
-    };
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const body = await resp.text();
-    let data = null;
-    try { data = JSON.parse(body); } catch (e) { data = { raw: body }; }
-    if (!resp.ok) {
-      return { attempted: true, ok: false, provider: 'gemini', status: resp.status, reason: data.error?.message || JSON.stringify(data) };
-    }
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find(p => p.inlineData);
-    if (!imagePart) {
-      return { attempted: true, ok: false, provider: 'gemini', reason: 'no-image-in-response' };
-    }
-    const b64 = imagePart.inlineData.data;
-    const outName = `gemini_${Date.now()}.png`;
-    const outPath = path.join(__dirname, '../generated_images', outName);
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, Buffer.from(b64, 'base64'));
-    tracker[today] = (tracker[today] || 0) + 1;
-    fs.writeFileSync(trackerFile, JSON.stringify(tracker, null, 2));
-    return { attempted: true, ok: true, provider: 'gemini', imageUrl: `/generated_images/${outName}`, localPath: outPath, callsToday: tracker[today] };
-  } catch (e) {
-    return { attempted: true, ok: false, provider: 'gemini', reason: e.message || 'exception' };
-  }
+function saveN8nGeneratedImage(image, designId, slideIndex) {
+  if (!image?.data || !image?.mimeType?.startsWith('image/')) return null;
+  const ext = image.mimeType.includes('jpeg') || image.mimeType.includes('jpg') ? 'jpg' : 'png';
+  const outName = `${designId}_slide_${slideIndex + 1}.${ext}`;
+  const outDir = path.join(__dirname, '../generated_images');
+  fs.mkdirSync(outDir, { recursive: true });
+  const outPath = path.join(outDir, outName);
+  fs.writeFileSync(outPath, Buffer.from(image.data, 'base64'));
+  return { imageUrl: `/generated_images/${outName}`, localPath: outPath, mimeType: image.mimeType };
 }
 
 async function generateDesignSchema(input, user) {
@@ -272,12 +232,31 @@ async function generateDesignSchema(input, user) {
     templateId,
     styleGuide: style,
     generation: {
-      strategy: n8nOrchestration.ok ? 'n8n-flowise-orchestrated-schema-render' : 'api-first-deterministic-schema-render',
-      realImageGeneration: await maybeCallGeminiImageGeneration(),
+      strategy: n8nOrchestration.ok ? 'n8n-flowise-gemini-orchestrated-image' : 'api-first-deterministic-schema-render',
+      realImageGeneration: null,
       warnings: n8nOrchestration.ok ? [] : ['n8n/Flowise orchestration was unavailable; local deterministic renderer handled the request.'],
       integrations: {}
     },
     createdAt: new Date().toISOString()
+  };
+
+  const generatedImages = [];
+  const n8nImage = n8nOrchestration.response?.gemini?.image;
+  const savedImage = saveN8nGeneratedImage(n8nImage, design.id, 0);
+  if (savedImage) {
+    slides[0].generatedImageUrl = savedImage.imageUrl;
+    slides[0].generatedImageLocalPath = savedImage.localPath;
+    slides[0].generatedImageMimeType = savedImage.mimeType;
+    generatedImages.push(savedImage.imageUrl);
+  }
+  design.generation.realImageGeneration = {
+    attempted: Boolean(n8nOrchestration.response?.gemini?.attempted),
+    ok: Boolean(savedImage && n8nOrchestration.response?.gemini?.ok),
+    provider: 'gemini-via-n8n',
+    model: n8nOrchestration.response?.gemini?.model || null,
+    generatedImages,
+    slideCount: slides.length,
+    generatedCount: generatedImages.length
   };
 
   const templateMemory = {
