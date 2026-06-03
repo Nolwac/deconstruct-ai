@@ -155,16 +155,44 @@ function saveN8nGeneratedImage(image, designId, slideIndex) {
   return { imageUrl: `/generated_images/${outName}`, localPath: outPath, mimeType: image.mimeType };
 }
 
+function sanitizeN8nOrchestration(orchestration) {
+  const response = orchestration.response || {};
+  const gemini = response.gemini || {};
+  return {
+    attempted: orchestration.attempted,
+    ok: orchestration.ok,
+    status: orchestration.status,
+    error: orchestration.error || null,
+    source: orchestration.source,
+    workflow: orchestration.workflow,
+    evidence: orchestration.evidence || {},
+    flowise: orchestration.flowise || null,
+    gemini: {
+      attempted: Boolean(gemini.attempted),
+      ok: Boolean(gemini.ok),
+      model: gemini.model || null,
+      conditioning: gemini.conditioning || null,
+      image: gemini.image ? { mimeType: gemini.image.mimeType, saved: true } : null
+    }
+  };
+}
+
 async function generateDesignSchema(input, user) {
   const referenceSources = normalizeSources(input.referenceImageFiles, input.referenceImageUrls);
   const assetSources = normalizeSources(input.userAssetFiles, input.userAssetUrls);
   const copies = asArray(input.userCopyTexts);
   const localIntent = classifyDesignIntent(input);
-  const templateId = input.templateId || makeId('tpl');
+  const memory = readJson(TEMPLATE_MEMORY_FILE, []);
+  const requestedTemplateId = input.templateId || null;
+  const existingTemplate = requestedTemplateId ? memory.find(item => item.templateId === requestedTemplateId) : null;
+  const templateMode = existingTemplate ? 'reuse-existing-template' : (referenceSources.length ? 'create-template-from-reference' : 'ad-hoc-generation');
+  const templateId = requestedTemplateId || makeId('tpl');
 
   const orchestrationPayload = {
     event: 'design_generation_request',
     templateId,
+    templateMode,
+    existingTemplateRules: existingTemplate ? { summary: existingTemplate.summary, style: existingTemplate.style, mode: existingTemplate.mode } : null,
     designType: input.designType,
     userCopyTexts: copies,
     caption: copies[0] || '',
@@ -193,8 +221,10 @@ async function generateDesignSchema(input, user) {
   };
   const canvasSize = getCanvasSize(input.designType);
   const style = {
-    ...getStylePreset(input.designType, intent.referenceCount, input.brandPalette),
-    orchestrationRules: flowiseRules.layoutRules || null
+    ...(existingTemplate?.style || getStylePreset(input.designType, intent.referenceCount, input.brandPalette)),
+    orchestrationRules: flowiseRules.layoutRules || existingTemplate?.style?.orchestrationRules || null,
+    templateMode,
+    templateSource: existingTemplate ? 'stored-template-memory' : (referenceSources.length ? 'reference-image-derived' : 'format-default')
   };
 
   const slides = Array.from({ length: intent.slideCount }, (_, slideIndex) => {
@@ -265,18 +295,23 @@ async function generateDesignSchema(input, user) {
     mode: intent.mode,
     summary: `${style.name}: ${style.visualDNA}. ${intent.reason}`,
     style,
+    templateMode,
+    source: templateMode === 'reuse-existing-template' ? 'existing-template' : (referenceSources.length ? 'reference-images' : 'default-format-rules'),
+    referenceImageCount: referenceSources.length,
+    assetImageCount: assetSources.length,
     createdAt: design.createdAt
   };
 
-  const memory = readJson(TEMPLATE_MEMORY_FILE, []);
-  memory.push(templateMemory);
-  writeJson(TEMPLATE_MEMORY_FILE, memory.slice(-250));
+  if (templateMode !== 'reuse-existing-template') {
+    memory.push(templateMemory);
+    writeJson(TEMPLATE_MEMORY_FILE, memory.slice(-250));
+  }
 
   const pinecone = await upsertTemplateMemory(templateMemory);
 
   design.generation.integrations = {
     pinecone,
-    n8n: n8nOrchestration,
+    n8n: sanitizeN8nOrchestration(n8nOrchestration),
     flowise: {
       attempted: true,
       ok: Boolean(n8nOrchestration.flowise?.source === 'flowise-chatflow'),
