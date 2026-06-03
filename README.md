@@ -101,26 +101,63 @@ deconstruct-ai/
 
 ## 🚀 Getting Started
 
-### 1. Flowise Setup (AI Brain)
-1. Launch your **Flowise** dashboard.
+### 1. Configure local environment
+
+```bash
+cp .env.example .env.local
+# edit .env.local locally; never commit real secrets
+```
+
+Local development is deterministic by default:
+- `ENABLE_REAL_IMAGE_GENERATION=false` prevents accidental paid model/image calls.
+- `ENABLE_EXTERNAL_INTEGRATION_CHECKS=false` keeps verification local unless explicitly enabled.
+- Pinecone credentials are optional. Without them, the app reports local fallback mode.
+
+### 2. Start the local stack with Docker Compose
+
+```bash
+docker compose up app mcp-server flowise n8n
+```
+
+Local URLs:
+- App: `http://localhost:5000`
+- MCP HTTP server: `http://localhost:5001/mcp/status`
+- Flowise: `http://localhost:3000`
+- n8n: `http://localhost:5678`
+
+The app container uses Docker-internal URLs for service-to-service calls (`mcp-server`, `flowise`, `n8n`) while the same ports remain exposed on localhost for browser/manual setup.
+
+### 3. Import Flowise and n8n assets
+
+Flowise:
+1. Open `http://localhost:3000`.
 2. Click **Add New** ➔ **Load Chatflow** and upload `flowise/deconstruct-ai-flowise-chatflow.json`.
-3. Configure your API credentials for:
-   - **Vision LLM**: OpenAI API Key (using `gpt-4o` or similar vision model) or Gemini API Key.
-   - **Pinecone Vector Store**: Pinecone environment credentials, Index Name (`graphics-templates`), and Namespace (`rulesets`).
-4. Save the chatflow and note down your **Chatflow ID** and **API URL**.
+3. Configure optional credentials only when you intentionally enable real model/Pinecone calls.
+4. Save the chatflow and copy its Chatflow ID into `.env.local` as `FLOWISE_CHATFLOW_ID`.
 
-### 2. n8n Setup (Orchestration Engine)
-1. Open your **n8n** editor canvas.
-2. Copy the contents of `n8n/deconstruct-ai-n8n-workflow.json` to your clipboard.
-3. Paste the contents directly into the n8n workspace (`Ctrl+V` or `Cmd+V`).
-4. Double-click the **Call Flowise Layer** node:
-   - Update the URL with your Flowise prediction API URL (`http://localhost:3000/api/v1/prediction/YOUR_FLOWISE_CHATFLOW_ID`).
-5. Double-click the **Image Generation Model Node** and link/create your OpenAI/Gemini credentials.
+n8n:
+1. Open `http://localhost:5678`.
+2. Import or paste `n8n/deconstruct-ai-n8n-workflow.json`.
+3. Set Flowise prediction URL to `http://flowise:3000/api/v1/prediction/<FLOWISE_CHATFLOW_ID>` when running inside Docker, or `http://localhost:3000/api/v1/prediction/<FLOWISE_CHATFLOW_ID>` when running n8n on the host.
+4. Keep paid image/model credential nodes disabled until real generation is explicitly approved.
 
-### 3. MCP Server Integration (Local Infrastructure)
-The orchestration workflow performs a POST request to `http://localhost:5001/mcp/log`. This endpoint maps to your local Model Context Protocol (MCP) server.
-- The MCP server enables the model to interact with the environment (logging workspace activity, saving files locally, or triggering local backup routines).
-- For further setup information, see [mcp-server/README.md](file:///c:/Users/LivinusTuring/Projects/deconstruct-ai/mcp-server/README.md).
+### 4. Local verification
+
+```bash
+npm test
+npm run verify:integrations
+```
+
+`npm run verify:integrations` checks files and local service wiring without paid API calls. For read-only external checks only, run:
+
+```bash
+ENABLE_EXTERNAL_INTEGRATION_CHECKS=true npm run verify:integrations
+```
+
+### 5. MCP Server Integration (Local Infrastructure)
+The orchestration workflow performs a POST request to `http://localhost:5001/mcp/log`. This endpoint maps to the local MCP-compatible server.
+- The MCP server logs workflow activity and caches generated artifacts locally.
+- For further setup information, see [mcp-server/README.md](mcp-server/README.md).
 
 ---
 

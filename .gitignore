@@ -100,3 +100,6 @@ pip-selfcheck.json
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test artifacts
+test-artifacts/

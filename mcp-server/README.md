@@ -1,47 +1,45 @@
 # MCP Server Configuration
 
-This directory contains specifications and logs for the Model Context Protocol (MCP) server layer used by Deconstruct AI.
+This directory contains the local Deconstruct AI MCP-compatible HTTP + stdio service.
 
-## Overview
+## What it exposes
 
-The MCP layer bridges the cloud-based orchestration (n8n & Flowise) with local operations on the hosting environment (VPS or local workstation).
+HTTP endpoints:
 
-The n8n orchestrator sends a request to the MCP server at `http://localhost:5001/mcp/log` for:
-- Saving local logs of templates and design requests.
-- Caching generated layouts and backing up assets.
-- Checking local system resources.
+- `GET /mcp/status` — local health/status for app, n8n, and verification wiring.
+- `POST /mcp/log` — append an audit event to `logs/mcp_activity.log`.
+- `POST /mcp/cache` — cache generated artifacts or schema snippets under `logs/cache/`.
 
-## Quick Start (Mock Server setup)
+Stdio tools:
 
-To spin up a basic Express receiver for the MCP logs:
+- `mcp_log_event`
+- `mcp_cache_file`
 
-1. In this directory, run:
-   ```bash
-   npm init -y
-   npm install express
-   ```
+## Local run
 
-2. Create a basic `index.js`:
-   ```javascript
-   const express = require('express');
-   const fs = require('fs');
-   const path = require('path');
-   const app = express();
-   app.use(express.json());
+From the repository root:
 
-   app.post('/mcp/log', (req, res) => {
-     console.log('Received MCP log payload:', req.body);
-     const logLine = `${new Date().toISOString()} - ${JSON.stringify(req.body)}\n`;
-     fs.appendFileSync(path.join(__dirname, 'mcp_activity.log'), logLine);
-     res.status(200).json({ status: 'success', message: 'Log recorded locally by MCP' });
-   });
+```bash
+npm install
+npm run dev:all
+```
 
-   app.listen(5001, () => {
-     console.log('MCP Local Handler listening on port 5001');
-   });
-   ```
+Or run only the MCP HTTP server:
 
-3. Run the mock handler:
-   ```bash
-   node index.js
-   ```
+```bash
+cd mcp-server
+npm install
+npm start
+```
+
+The HTTP server listens on `http://localhost:5001` by default. Override with `MCP_PORT`.
+
+## Verification
+
+With the MCP server running:
+
+```bash
+npm run verify:mcp
+```
+
+The verification is local-only and writes a small test audit/cache file under `logs/`.

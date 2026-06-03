@@ -1,12 +1,55 @@
-version: '3.8'
-
 services:
+  app:
+    image: node:24-alpine
+    container_name: deconstruct-ai-app
+    working_dir: /workspace
+    command: sh -c "npm install && npm start"
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      N8N_BASE_URL: http://n8n:5678
+      N8N_WEBHOOK_URL: http://n8n:5678/webhook/design-request
+      FLOWISE_BASE_URL: http://flowise:3000
+      MCP_HTTP_URL: http://mcp-server:5001
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./:/workspace
+      - app_node_modules:/workspace/node_modules
+    depends_on:
+      - mcp-server
+      - flowise
+      - n8n
+    networks:
+      - deconstruct_net
+
+  mcp-server:
+    image: node:24-alpine
+    container_name: deconstruct-ai-mcp
+    working_dir: /workspace/mcp-server
+    command: sh -c "npm install && npm start"
+    restart: unless-stopped
+    environment:
+      MCP_PORT: 5001
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./:/workspace
+      - mcp_node_modules:/workspace/mcp-server/node_modules
+    networks:
+      - deconstruct_net
+
   flowise:
     image: flowiseai/flowise:latest
-    container_name: flowise
-    restart: always
+    container_name: deconstruct-ai-flowise
+    restart: unless-stopped
+    env_file:
+      - .env.local
     environment:
-      - PORT=3000
+      PORT: 3000
     ports:
       - "3000:3000"
     volumes:
@@ -16,22 +59,27 @@ services:
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
-    container_name: n8n
-    restart: always
+    container_name: deconstruct-ai-n8n
+    restart: unless-stopped
     ports:
       - "5678:5678"
     environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=UTC
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
       - deconstruct_net
 
 volumes:
+  app_node_modules:
+  mcp_node_modules:
   flowise_data:
   n8n_data:
 

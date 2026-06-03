@@ -1,6 +1,9 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const loadEnv = require('./server/config/loadEnv');
+
+loadEnv(__dirname);
 
 const LOGS_DIR = path.join(__dirname, 'logs');
 if (!fs.existsSync(LOGS_DIR)) {
@@ -13,7 +16,7 @@ function startProcess(name, command, args, cwd = __dirname) {
   console.log(`[Orchestrator] Starting ${name}...`);
   const logFile = fs.createWriteStream(path.join(LOGS_DIR, `${name.toLowerCase()}.log`), { flags: 'a' });
 
-  const proc = spawn(command, args, { cwd, shell: true });
+  const proc = spawn(command, args, { cwd, shell: true, env: process.env });
 
   proc.stdout.on('data', (data) => {
     const output = data.toString().trim();
