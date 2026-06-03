@@ -22,6 +22,13 @@ window.deconstructState = state;
 // API Endpoint configuration
 const API_URL = window.location.origin;
 
+function resolveReachableUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  return url
+    .replace(/^http:\/\/localhost(?::\d+)?/i, API_URL)
+    .replace(/^http:\/\/127\.0\.0\.1(?::\d+)?/i, API_URL);
+}
+
 // DOM Elements
 const authSection = document.getElementById('auth-section');
 const dashboardSection = document.getElementById('dashboard-section');
@@ -286,9 +293,9 @@ async function handleGenerateDesign(e) {
     designType: state.activeDesignType,
     userCopyTexts: headlines,
     brandPalette: [bgColorVal, accentColorVal, textHighlightColorVal, '#ffffff'],
-    referenceImageUrls: state.activeRefSource === 'url' ? [refUrlVal] : [],
+    referenceImageUrls: state.activeRefSource === 'url' ? [resolveReachableUrl(refUrlVal)] : [],
     referenceImageFiles: state.activeRefSource === 'file' ? state.refFilesBase64 : [],
-    userAssetUrls: state.activeAssetSource === 'url' ? [assetUrlVal] : [],
+    userAssetUrls: state.activeAssetSource === 'url' ? [resolveReachableUrl(assetUrlVal)] : [],
     userAssetFiles: state.activeAssetSource === 'file' ? state.assetFilesBase64 : []
   };
 
@@ -296,18 +303,22 @@ async function handleGenerateDesign(e) {
     // Step 0: Triggering webhook (0 - 800ms)
     await animateStep(0, 1000);
     
-    // Step 1: LLM Vision Analysis (1000 - 2200ms)
-    await animateStep(1, 1500);
+    // Step 1: n8n + Flowise orchestration setup
+    await animateStep(1, 1200);
 
-    // Call actual backend router
+    // Step 2 stays active while n8n runs Gemini. This can take real time, so avoid
+    // pretending the UI is stuck on Pinecone/local memory.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
     const res = await fetch(`${API_URL}/api/designs/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${state.token}`
       },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!res.ok) {
       const errPayload = await res.json().catch(() => ({}));
@@ -315,11 +326,11 @@ async function handleGenerateDesign(e) {
     }
     const data = await res.json();
 
-    // Step 2: Vector Syncing to Pinecone (2200 - 3200ms)
-    await animateStep(2, 1000);
+    // Step 2: Gemini image returned from n8n
+    await animateStep(2, 300);
 
-    // Step 3: Draw Canvas output (3200 - 4000ms)
-    await animateStep(3, 800);
+    // Step 3: Save/render output image
+    await animateStep(3, 300);
 
     // Finalize Generation
     state.currentDesign = data.design;
@@ -344,7 +355,10 @@ async function handleGenerateDesign(e) {
     loadIntegrationStatus();
   } catch (err) {
     console.error(err);
-    showToast(`Generation error: ${err.message || 'Please check server connections.'}`, 'error');
+    const message = err.name === 'AbortError'
+      ? 'Generation timed out after 3 minutes. Check n8n/Gemini workflow logs.'
+      : (err.message || 'Please check server connections.');
+    showToast(`Generation error: ${message}`, 'error');
     hideLoader();
   }
 }
@@ -499,7 +513,7 @@ function loadImage(src) {
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = (e) => reject(e);
-    img.src = src;
+    img.src = resolveReachableUrl(src);
   });
 }
 
