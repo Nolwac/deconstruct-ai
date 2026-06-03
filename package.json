@@ -5,7 +5,12 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node verify_app.js"
+    "test": "node verify_app.js",
+    "verify:integrations": "node verify_integration.js",
+    "verify:mcp": "node verify_mcp.js",
+    "verify:ui": "node verify_ui_static.js",
+    "verify:browser": "node verify_browser.js",
+    "dev:all": "node start_all.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -13,5 +18,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   }
 }

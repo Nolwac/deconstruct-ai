@@ -111,8 +111,19 @@ async function runTests() {
   }
   console.log('✔ Profile verified successfully.');
 
-  // Test 4: Design Generation Node
-  console.log('\nTest 4: Design Generation (/api/designs/generate)...');
+  // Test 4: Integration status should be available without external API calls by default
+  console.log('\nTest 4: Integration status (/api/integrations/status)...');
+  const integrationRes = await fetch(`${BASE_URL}/api/integrations/status`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const integrationData = await integrationRes.json();
+  if (integrationRes.status !== 200 || !integrationData.n8n || !integrationData.flowise || !integrationData.mcp || !integrationData.pinecone) {
+    throw new Error(`Integration status failed: ${JSON.stringify(integrationData)}`);
+  }
+  console.log('✔ Integration status structure verified.');
+
+  // Test 5: Design Generation Node
+  console.log('\nTest 5: Design Generation (/api/designs/generate)...');
   const designPayload = {
     designType: 'LinkedIn Carousel',
     userCopyTexts: ['Verify Slide 1 Caption', 'Verify Slide 2 Caption', 'Verify Slide 3 Caption'],
@@ -138,8 +149,37 @@ async function runTests() {
   }
   console.log('✔ Design layout schemas (3 slides) generated & stored.');
 
-  // Test 5: Design History Retrieve
-  console.log('\nTest 5: History portfolio lookup (/api/designs/history)...');
+
+
+  // Test 6: YouTube thumbnail with one reference and two assets must remain one composite design
+  console.log('\nTest 6: YouTube Thumbnail multi-asset single-output regression...');
+  const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+  const thumbnailPayload = {
+    designType: 'YouTube Thumbnail',
+    userCopyTexts: ['See Legends!'],
+    brandPalette: ['#111827', '#b11226', '#f8fafc', '#ffffff'],
+    referenceImageFiles: [tinyPng],
+    userAssetFiles: [tinyPng, tinyPng]
+  };
+  const thumbRes = await fetch(`${BASE_URL}/api/designs/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(thumbnailPayload)
+  });
+  const thumbData = await thumbRes.json();
+  if (thumbRes.status !== 200 || thumbData.design.mode !== 'single' || thumbData.design.slides.length !== 1) {
+    throw new Error(`Thumbnail should be a single output: ${JSON.stringify(thumbData)}`);
+  }
+  if (!thumbData.design.slides[0].assets || thumbData.design.slides[0].assets.length !== 2) {
+    throw new Error(`Thumbnail should preserve two asset placements: ${JSON.stringify(thumbData.design.slides[0])}`);
+  }
+  if (thumbData.design.intent.reason.includes('carousel')) {
+    throw new Error(`Thumbnail intent reason should not classify as carousel: ${JSON.stringify(thumbData.design.intent)}`);
+  }
+  console.log('✔ Multi-asset thumbnail regression verified: one slide, two asset placements.');
+
+  // Test 7: Design History Retrieve
+  console.log('\nTest 7: History portfolio lookup (/api/designs/history)...');
   const historyRes = await fetch(`${BASE_URL}/api/designs/history`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -149,8 +189,10 @@ async function runTests() {
     throw new Error(`Portfolio retrieval failed: ${JSON.stringify(historyData)}`);
   }
   
-  if (historyData[0].userCopyText !== joinedText) {
-    throw new Error(`Data mismatch in retrieved portfolio card: ${historyData[0].userCopyText}`);
+  const carouselHistory = historyData.find(item => item.userCopyText === joinedText && item.designType === 'LinkedIn Carousel');
+  const thumbnailHistory = historyData.find(item => item.userCopyText === 'See Legends!' && item.designType === 'YouTube Thumbnail');
+  if (!carouselHistory || !thumbnailHistory) {
+    throw new Error(`Expected generated carousel and thumbnail in history: ${JSON.stringify(historyData.map(d => ({ type: d.designType, text: d.userCopyText })))}`);
   }
   console.log('✔ Portfolio history validation completed successfully.');
 

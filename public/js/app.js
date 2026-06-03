@@ -17,6 +17,7 @@ const state = {
   activeSlideIndex: 0,
   totalSlidesCount: 1
 };
+window.deconstructState = state;
 
 // API Endpoint configuration
 const API_URL = window.location.origin;
@@ -49,6 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
     showAuthView();
   }
   updateDesignTypeSelection();
+  setupFileDropZones();
+  ensureUiFeedbackElements();
+  if (state.token) loadIntegrationStatus();
 });
 
 // ----------------------------------------------------
@@ -66,6 +70,7 @@ function showDashboardView() {
   usernameDisplay.textContent = state.username;
   userInitials.textContent = state.username.substring(0, 2).toUpperCase();
   loadHistory();
+  loadIntegrationStatus();
 }
 
 async function checkTokenAndInitialize() {
@@ -263,11 +268,11 @@ async function handleGenerateDesign(e) {
   
   // Validate file uploads if they are toggled
   if (state.activeRefSource === 'file' && state.refFilesBase64.length === 0) {
-    alert('Please upload one or more style reference design templates.');
+    showToast('Please upload one or more style reference design templates.', 'error');
     return;
   }
   if (state.activeAssetSource === 'file' && state.assetFilesBase64.length === 0) {
-    alert('Please upload one or more asset photos.');
+    showToast('Please upload one or more asset photos.', 'error');
     return;
   }
 
@@ -304,7 +309,10 @@ async function handleGenerateDesign(e) {
       body: JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error('API Request failed');
+    if (!res.ok) {
+      const errPayload = await res.json().catch(() => ({}));
+      throw new Error(errPayload.message || 'API request failed');
+    }
     const data = await res.json();
 
     // Step 2: Vector Syncing to Pinecone (2200 - 3200ms)
@@ -331,10 +339,12 @@ async function handleGenerateDesign(e) {
     await drawDesignOnCanvas(data.design, firstSlide.userAssetFile || firstSlide.userAssetUrl);
     
     hideLoader();
+    showToast(`Generated ${state.totalSlidesCount === 1 ? 'one design' : state.totalSlidesCount + ' slides'} via backend pipeline.`, 'success');
     loadHistory(); // Refresh history panel
+    loadIntegrationStatus();
   } catch (err) {
     console.error(err);
-    alert('Generation error. Please check server connections.');
+    showToast(`Generation error: ${err.message || 'Please check server connections.'}`, 'error');
     hideLoader();
   }
 }
@@ -425,53 +435,16 @@ async function drawDesignOnCanvas(design, userAssetImageSource) {
   
   ctx.globalAlpha = 1.0; // Reset
 
-  // Draw User Asset Image
-  if (userAssetImageSource) {
-    try {
-      const img = await loadImage(userAssetImageSource);
-      ctx.save();
-      
-      const config = schema.assetConfig;
-      // Handle clipping bounds (round for avatar, rounded rectangle for regular)
-      if (design.designType === 'LinkedIn Carousel' || design.designType === 'Twitter Banner') {
-        // Circle crop
-        ctx.beginPath();
-        const centerX = config.x + config.width / 2;
-        const centerY = config.y + config.height / 2;
-        const radius = config.width / 2;
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        ctx.clip();
-      } else {
-        // Rounded Rect crop
-        drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
-        ctx.clip();
-      }
+  // Draw one or more user assets. This is what keeps a thumbnail with Bob + Ninja Man as ONE composite design.
+  const assets = Array.isArray(schema.assets) && schema.assets.length
+    ? schema.assets
+    : (userAssetImageSource ? [{ ...schema.assetConfig, source: userAssetImageSource }] : []);
 
-      // Draw and scale user asset to cover box
-      const scale = Math.max(config.width / img.width, config.height / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      const x = config.x + (config.width - w) / 2;
-      const y = config.y + (config.height - h) / 2;
-      ctx.drawImage(img, x, y, w, h);
-      ctx.restore();
-      
-      // Draw outer accent border around asset
-      ctx.strokeStyle = schema.palette[1] || '#6366f1';
-      ctx.lineWidth = 4;
-      if (design.designType === 'LinkedIn Carousel' || design.designType === 'Twitter Banner') {
-        ctx.beginPath();
-        ctx.arc(config.x + config.width/2, config.y + config.height/2, config.width/2, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
-        ctx.stroke();
-      }
-    } catch (err) {
-      console.warn('Could not load user asset image, drawing fallback avatar card', err);
-      drawFallbackAssetCard(schema.assetConfig, schema.palette);
+  if (assets.length > 0) {
+    for (const asset of assets) {
+      await drawAssetLayer(asset, schema.palette, design.designType);
     }
-  } else {
+  } else if (schema.assetConfig && schema.assetConfig.width > 0) {
     drawFallbackAssetCard(schema.assetConfig, schema.palette);
   }
 
@@ -792,4 +765,134 @@ function navigateSlide(direction) {
   
   const activeSlide = state.currentDesign.slides[state.activeSlideIndex];
   drawDesignOnCanvas(state.currentDesign, activeSlide.userAssetFile || activeSlide.userAssetUrl);
+}
+
+
+// ----------------------------------------------------
+// Production UI Feedback, Drag & Drop, Integration Status
+// ----------------------------------------------------
+function ensureUiFeedbackElements() {
+  if (!document.getElementById('toast-region')) {
+    const toast = document.createElement('div');
+    toast.id = 'toast-region';
+    toast.className = 'toast-region';
+    document.body.appendChild(toast);
+  }
+
+  if (!document.getElementById('integration-status-panel')) {
+    const panel = document.createElement('div');
+    panel.id = 'integration-status-panel';
+    panel.className = 'integration-status-panel';
+    panel.innerHTML = '<span class="status-pill muted">Checking integrations…</span>';
+    const header = document.querySelector('.workspace-header');
+    if (header) header.appendChild(panel);
+  }
+}
+
+function showToast(message, type = 'info') {
+  ensureUiFeedbackElements();
+  const region = document.getElementById('toast-region');
+  const item = document.createElement('div');
+  item.className = `toast toast-${type}`;
+  item.textContent = message;
+  region.appendChild(item);
+  setTimeout(() => item.remove(), 6000);
+}
+
+function setupFileDropZones() {
+  [
+    { type: 'ref', zoneId: 'ref-file-container', inputId: 'ref-file-input' },
+    { type: 'asset', zoneId: 'asset-file-container', inputId: 'asset-file-input' }
+  ].forEach(({ type, zoneId, inputId }) => {
+    const zone = document.getElementById(zoneId);
+    const input = document.getElementById(inputId);
+    if (!zone || !input || zone.dataset.dropReady === 'true') return;
+    zone.dataset.dropReady = 'true';
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      zone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        zone.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      zone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        zone.classList.remove('drag-over');
+      });
+    });
+
+    zone.addEventListener('drop', (event) => {
+      const files = Array.from(event.dataTransfer.files || []).filter(file => file.type.startsWith('image/'));
+      if (!files.length) {
+        showToast('Drop image files only.', 'error');
+        return;
+      }
+      const dt = new DataTransfer();
+      files.forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      handleFileSelected(type, input);
+      showToast(`${files.length} ${type === 'ref' ? 'reference' : 'asset'} image(s) added.`, 'success');
+    });
+  });
+}
+
+async function loadIntegrationStatus() {
+  if (!state.token) return;
+  ensureUiFeedbackElements();
+  const panel = document.getElementById('integration-status-panel');
+  try {
+    const res = await fetch(`${API_URL}/api/integrations/status`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) throw new Error('status unavailable');
+    const data = await res.json();
+    const entries = Object.values(data).map(item => {
+      const ok = item.ok || (item.name === 'pinecone' && item.configured);
+      return `<span class="status-pill ${ok ? 'ok' : 'warn'}">${item.name}: ${ok ? 'ready' : 'offline'}</span>`;
+    }).join('');
+    panel.innerHTML = entries;
+  } catch (error) {
+    panel.innerHTML = '<span class="status-pill warn">integration status unavailable</span>';
+  }
+}
+
+async function drawAssetLayer(asset, palette, designType) {
+  const config = asset;
+  if (!config || !config.width || !config.height) return;
+  try {
+    const img = await loadImage(config.source);
+    ctx.save();
+    const circular = config.borderRadius >= Math.min(config.width, config.height) / 2 || designType === 'Twitter Banner';
+    if (circular) {
+      ctx.beginPath();
+      ctx.arc(config.x + config.width / 2, config.y + config.height / 2, Math.min(config.width, config.height) / 2, 0, Math.PI * 2);
+      ctx.clip();
+    } else {
+      drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
+      ctx.clip();
+    }
+    const scale = Math.max(config.width / img.width, config.height / img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    ctx.drawImage(img, config.x + (config.width - w) / 2, config.y + (config.height - h) / 2, w, h);
+    ctx.restore();
+
+    ctx.strokeStyle = palette[1] || '#6366f1';
+    ctx.lineWidth = 4;
+    if (circular) {
+      ctx.beginPath();
+      ctx.arc(config.x + config.width / 2, config.y + config.height / 2, Math.min(config.width, config.height) / 2, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
+      ctx.stroke();
+    }
+  } catch (err) {
+    console.warn('Could not load asset image, drawing fallback', err);
+    drawFallbackAssetCard(config, palette);
+  }
 }
