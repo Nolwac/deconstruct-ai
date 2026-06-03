@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { readJson, writeJson } = require('./storage');
-const { notifyN8n, callFlowise, upsertTemplateMemory } = require('./integrations');
+const { orchestrateDesignWithN8n, upsertTemplateMemory } = require('./integrations');
 
 const TEMPLATE_MEMORY_FILE = path.join(__dirname, '../template-memory.json');
 
@@ -144,22 +144,98 @@ function normalizeSources(files, urls) {
   return [...asArray(files), ...asArray(urls)];
 }
 
-async function maybeCallGeminiImageGeneration() {
+async function maybeCallGeminiImageGeneration({ prompt = null, designType = 'Design' } = {}) {
   if (process.env.ENABLE_REAL_IMAGE_GENERATION !== 'true') {
     return { attempted: false, ok: false, provider: 'gemini', reason: 'disabled-to-protect-budget' };
   }
-  // Real image generation is intentionally not invoked by default. This placeholder keeps the API contract explicit.
-  return { attempted: false, ok: false, provider: 'gemini', reason: 'adapter-not-enabled-in-this-safe-build' };
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { attempted: false, ok: false, provider: 'gemini', reason: 'GEMINI_API_KEY missing' };
+  }
+  const cap = parseInt(process.env.GEMINI_DAILY_CAP || '10', 10);
+  const trackerFile = path.join(__dirname, '../logs', 'gemini_daily_calls.json');
+  const today = new Date().toISOString().split('T')[0];
+  let tracker = {};
+  try { if (fs.existsSync(trackerFile)) tracker = JSON.parse(fs.readFileSync(trackerFile, 'utf8')); } catch (e) {}
+  const callsToday = (tracker[today] || 0);
+  if (callsToday >= cap) {
+    return { attempted: false, ok: false, provider: 'gemini', reason: `daily-cap-reached (${callsToday}/${cap})` };
+  }
+  try {
+    const payload = {
+      contents: [{ parts: [{ text: prompt || `Generate a ${designType} image` }] }],
+      generationConfig: { responseMimeType: 'image/png' }
+    };
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const body = await resp.text();
+    let data = null;
+    try { data = JSON.parse(body); } catch (e) { data = { raw: body }; }
+    if (!resp.ok) {
+      return { attempted: true, ok: false, provider: 'gemini', status: resp.status, reason: data.error?.message || JSON.stringify(data) };
+    }
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find(p => p.inlineData);
+    if (!imagePart) {
+      return { attempted: true, ok: false, provider: 'gemini', reason: 'no-image-in-response' };
+    }
+    const b64 = imagePart.inlineData.data;
+    const outName = `gemini_${Date.now()}.png`;
+    const outPath = path.join(__dirname, '../generated_images', outName);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, Buffer.from(b64, 'base64'));
+    tracker[today] = (tracker[today] || 0) + 1;
+    fs.writeFileSync(trackerFile, JSON.stringify(tracker, null, 2));
+    return { attempted: true, ok: true, provider: 'gemini', imageUrl: `/generated_images/${outName}`, localPath: outPath, callsToday: tracker[today] };
+  } catch (e) {
+    return { attempted: true, ok: false, provider: 'gemini', reason: e.message || 'exception' };
+  }
 }
 
 async function generateDesignSchema(input, user) {
   const referenceSources = normalizeSources(input.referenceImageFiles, input.referenceImageUrls);
   const assetSources = normalizeSources(input.userAssetFiles, input.userAssetUrls);
   const copies = asArray(input.userCopyTexts);
-  const intent = classifyDesignIntent(input);
-  const canvasSize = getCanvasSize(input.designType);
-  const style = getStylePreset(input.designType, intent.referenceCount, input.brandPalette);
+  const localIntent = classifyDesignIntent(input);
   const templateId = input.templateId || makeId('tpl');
+
+  const orchestrationPayload = {
+    event: 'design_generation_request',
+    templateId,
+    designType: input.designType,
+    userCopyTexts: copies,
+    caption: copies[0] || '',
+    referenceImageUrls: asArray(input.referenceImageUrls),
+    referenceImageFiles: asArray(input.referenceImageFiles),
+    userAssetUrls: asArray(input.userAssetUrls),
+    userAssetFiles: asArray(input.userAssetFiles),
+    referenceCount: referenceSources.length,
+    assetCount: assetSources.length,
+    requestedSlides: localIntent.slideCount,
+    localIntent
+  };
+  const n8nOrchestration = await orchestrateDesignWithN8n(orchestrationPayload);
+  if (process.env.REQUIRE_N8N_ORCHESTRATION === 'true' && !n8nOrchestration.ok) {
+    throw new Error(`n8n/Flowise orchestration failed: ${n8nOrchestration.error || n8nOrchestration.status || 'unknown error'}`);
+  }
+
+  const flowiseRules = n8nOrchestration.flowise || {};
+  const intent = {
+    ...localIntent,
+    mode: flowiseRules.mode || localIntent.mode,
+    isCarousel: (flowiseRules.mode || localIntent.mode) === 'carousel',
+    slideCount: Number(flowiseRules.slideCount || localIntent.slideCount),
+    orchestrationSource: n8nOrchestration.source,
+    flowiseChatflowId: flowiseRules.chatflowId || null
+  };
+  const canvasSize = getCanvasSize(input.designType);
+  const style = {
+    ...getStylePreset(input.designType, intent.referenceCount, input.brandPalette),
+    orchestrationRules: flowiseRules.layoutRules || null
+  };
 
   const slides = Array.from({ length: intent.slideCount }, (_, slideIndex) => {
     const copy = copies[slideIndex] || copies[0] || '';
@@ -196,9 +272,9 @@ async function generateDesignSchema(input, user) {
     templateId,
     styleGuide: style,
     generation: {
-      strategy: 'api-first-deterministic-schema-render',
+      strategy: n8nOrchestration.ok ? 'n8n-flowise-orchestrated-schema-render' : 'api-first-deterministic-schema-render',
       realImageGeneration: await maybeCallGeminiImageGeneration(),
-      warnings: [],
+      warnings: n8nOrchestration.ok ? [] : ['n8n/Flowise orchestration was unavailable; local deterministic renderer handled the request.'],
       integrations: {}
     },
     createdAt: new Date().toISOString()
@@ -217,13 +293,18 @@ async function generateDesignSchema(input, user) {
   memory.push(templateMemory);
   writeJson(TEMPLATE_MEMORY_FILE, memory.slice(-250));
 
-  const [pinecone, flowise, n8n] = await Promise.all([
-    upsertTemplateMemory(templateMemory),
-    callFlowise(`Extract/confirm design rules for ${input.designType}: ${templateMemory.summary}`),
-    notifyN8n({ event: 'design_request', designId: design.id, templateId, designType: input.designType, mode: intent.mode, slideCount: slides.length })
-  ]);
+  const pinecone = await upsertTemplateMemory(templateMemory);
 
-  design.generation.integrations = { pinecone, flowise, n8n };
+  design.generation.integrations = {
+    pinecone,
+    n8n: n8nOrchestration,
+    flowise: {
+      attempted: true,
+      ok: Boolean(n8nOrchestration.flowise?.source === 'flowise-chatflow'),
+      response: n8nOrchestration.flowise || null,
+      chatflowId: n8nOrchestration.flowise?.chatflowId || null
+    }
+  };
   return design;
 }
 

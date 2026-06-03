@@ -89,13 +89,30 @@ async function getPineconeStatus() {
 }
 
 async function notifyN8n(payload) {
-  const webhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/design-request';
+  const webhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/deconstruct-ai-generate';
   const result = await fetchJson(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  });
+  }, 15000);
   return { attempted: true, ok: result.ok, status: result.status, error: result.error || null, response: result.json || null };
+}
+
+async function orchestrateDesignWithN8n(payload) {
+  const n8n = await notifyN8n(payload);
+  const evidence = n8n.response?.evidence || {};
+  const flowise = n8n.response?.flowise || null;
+  return {
+    attempted: true,
+    ok: Boolean(n8n.ok && n8n.response?.source === 'n8n-live-orchestrator' && evidence.n8n && evidence.flowise),
+    status: n8n.status,
+    error: n8n.error || (!n8n.ok ? JSON.stringify(n8n.response || {}) : null),
+    source: n8n.response?.source || null,
+    workflow: n8n.response?.n8nWorkflow || null,
+    evidence,
+    flowise,
+    response: n8n.response || null
+  };
 }
 
 async function callFlowise(question, overrideConfig = {}) {
@@ -134,4 +151,4 @@ async function upsertTemplateMemory(template) {
   return { attempted: true, ok: result.ok, status: result.status, localVector, error: result.error || (!result.ok ? JSON.stringify(result.json || {}) : null) };
 }
 
-module.exports = { getIntegrationStatus, notifyN8n, callFlowise, upsertTemplateMemory };
+module.exports = { getIntegrationStatus, notifyN8n, orchestrateDesignWithN8n, callFlowise, upsertTemplateMemory };

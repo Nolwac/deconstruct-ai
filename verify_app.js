@@ -147,7 +147,16 @@ async function runTests() {
   if (!genData.design.slides || genData.design.slides.length !== 3) {
     throw new Error(`Design slides structure error: ${JSON.stringify(genData.design.slides)}`);
   }
-  console.log('✔ Design layout schemas (3 slides) generated & stored.');
+  if (genData.design.generation?.strategy !== 'n8n-flowise-orchestrated-schema-render') {
+    throw new Error(`Generation strategy should be orchestrated: ${genData.design.generation?.strategy}`);
+  }
+  if (!genData.design.generation?.integrations?.n8n?.ok) {
+    throw new Error(`n8n orchestration did not succeed: ${JSON.stringify(genData.design.generation?.integrations?.n8n)}`);
+  }
+  if (!genData.design.generation?.integrations?.flowise?.ok) {
+    throw new Error(`Flowise orchestration did not succeed: ${JSON.stringify(genData.design.generation?.integrations?.flowise)}`);
+  }
+  console.log('✔ Design layout schemas (3 slides) generated & stored with n8n/Flowise evidence.');
 
 
 
@@ -176,7 +185,16 @@ async function runTests() {
   if (thumbData.design.intent.reason.includes('carousel')) {
     throw new Error(`Thumbnail intent reason should not classify as carousel: ${JSON.stringify(thumbData.design.intent)}`);
   }
-  console.log('✔ Multi-asset thumbnail regression verified: one slide, two asset placements.');
+  if (thumbData.design.generation?.strategy !== 'n8n-flowise-orchestrated-schema-render') {
+    throw new Error(`Thumbnail generation strategy should be orchestrated: ${thumbData.design.generation?.strategy}`);
+  }
+  if (!thumbData.design.generation?.integrations?.n8n?.ok) {
+    throw new Error(`Thumbnail n8n orchestration did not succeed: ${JSON.stringify(thumbData.design.generation?.integrations?.n8n)}`);
+  }
+  if (!thumbData.design.generation?.integrations?.flowise?.ok) {
+    throw new Error(`Thumbnail Flowise orchestration did not succeed: ${JSON.stringify(thumbData.design.generation?.integrations?.flowise)}`);
+  }
+  console.log('✔ Multi-asset thumbnail regression verified: one slide, two asset placements, with n8n/Flowise evidence.');
 
   // Test 7: Design History Retrieve
   console.log('\nTest 7: History portfolio lookup (/api/designs/history)...');

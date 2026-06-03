@@ -66,10 +66,13 @@ async function main() {
     assert(thumbPayload.design.mode === 'single', 'Thumbnail should be single mode.');
     assert(thumbPayload.design.slides.length === 1, 'Thumbnail should render one output slide.');
     assert(thumbPayload.design.slides[0].assets.length === 2, 'Thumbnail should keep two asset placements.');
+    assert(thumbPayload.design.generation?.strategy === 'n8n-flowise-orchestrated-schema-render', 'Thumbnail should be n8n/Flowise orchestrated.');
+    assert(thumbPayload.design.generation?.integrations?.n8n?.ok === true, 'Thumbnail n8n orchestration must succeed.');
+    assert(thumbPayload.design.generation?.integrations?.flowise?.ok === true, 'Thumbnail Flowise orchestration must succeed.');
     assert(await page.locator('#carousel-controls.hidden').count() === 1, 'Carousel controls should be hidden for thumbnail.');
     assert(await page.locator('#download-design-btn:not([disabled])').count() === 1, 'Download button should become enabled.');
     await page.screenshot({ path: path.join(SHOT_DIR, 'browser-thumbnail.png'), fullPage: true });
-    console.log('✔ YouTube thumbnail live flow generated one composite design from two assets.');
+    console.log('✔ YouTube thumbnail live flow generated one composite design from two assets via n8n/Flowise.');
 
     await page.evaluate(() => {
       const radio = document.querySelector('input[name="designType"][value="LinkedIn Carousel"]');
@@ -87,10 +90,13 @@ async function main() {
     await page.waitForFunction(() => window.deconstructState?.currentDesign?.slides?.length === 3, null, { timeout: 12000 });
     assert(carouselPayload.design.mode === 'carousel', 'LinkedIn selected format should be carousel mode.');
     assert(carouselPayload.design.slides.length === 3, 'Carousel should produce three slides.');
+    assert(carouselPayload.design.generation?.strategy === 'n8n-flowise-orchestrated-schema-render', 'Carousel should be n8n/Flowise orchestrated.');
+    assert(carouselPayload.design.generation?.integrations?.n8n?.ok === true, 'Carousel n8n orchestration must succeed.');
+    assert(carouselPayload.design.generation?.integrations?.flowise?.ok === true, 'Carousel Flowise orchestration must succeed.');
     assert(await page.locator('#carousel-controls:not(.hidden)').count() === 1, 'Carousel controls should be visible.');
     assert((await page.textContent('#carousel-slide-indicator')).includes('Slide 1 of 3'), 'Slide indicator should show 1 of 3.');
     await page.screenshot({ path: path.join(SHOT_DIR, 'browser-carousel.png'), fullPage: true });
-    console.log('✔ LinkedIn carousel live flow generated three slides and visible controls.');
+    console.log('✔ LinkedIn carousel live flow generated three slides and visible controls via n8n/Flowise.');
 
     assert(networkHits.some(hit => hit.url.includes('/api/designs/generate')), 'Browser did not make backend generation calls.');
     assert(networkHits.some(hit => hit.url.includes('/api/integrations/status')), 'Browser did not request integration status.');
