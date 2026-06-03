@@ -4,6 +4,11 @@ const path = require('path');
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { CallToolRequestSchema, ListToolsRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
+const loadEnv = require('../server/config/loadEnv');
+const { generateDesignSchema, classifyDesignIntent } = require('../server/services/generationPipeline');
+const { getIntegrationStatus } = require('../server/services/integrations');
+
+loadEnv(path.join(__dirname, '..'));
 
 // ----------------------------------------------------
 // Setup Paths & Logs
@@ -24,6 +29,16 @@ if (!fs.existsSync(CACHE_DIR)) {
 // ----------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+
+app.get('/mcp/status', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'deconstruct-ai-mcp',
+    httpPort: Number(process.env.MCP_PORT || 5001),
+    logFile: LOG_FILE,
+    cacheDir: CACHE_DIR
+  });
+});
 
 app.post('/mcp/log', (req, res) => {
   const { event, user_context, flowise_response, data } = req.body;
@@ -51,24 +66,48 @@ app.post('/mcp/cache', (req, res) => {
     return res.status(400).json({ status: 'error', message: 'fileName and content are required.' });
   }
 
-  console.log(`[HTTP MCP] Caching file: ${fileName}`);
-  const filePath = path.join(CACHE_DIR, fileName);
-  
-  // Content can be base64 image or stringified JSON
-  if (content.startsWith('data:image')) {
-    // base64 image data
+  const result = cacheFile(fileName, content);
+  res.status(200).json({
+    status: 'success',
+    message: `File cached successfully by MCP file cache tool.`,
+    path: result.path
+  });
+});
+
+app.post('/mcp/design-schema', async (req, res) => {
+  try {
+    const input = req.body || {};
+    if (!input.designType || !Array.isArray(input.userCopyTexts) || input.userCopyTexts.length === 0) {
+      return res.status(400).json({ status: 'error', message: 'designType and userCopyTexts[] are required.' });
+    }
+    const design = await generateDesignSchema(input, { id: 'mcp_http_user', username: input.username || 'mcp-http' });
+    const cache = cacheFile(`${design.id}.schema.json`, JSON.stringify(design, null, 2));
+    res.status(200).json({ status: 'success', design, cachePath: cache.path });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.post('/mcp/classify-intent', (req, res) => {
+  try {
+    res.status(200).json({ status: 'success', intent: classifyDesignIntent(req.body || {}) });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+function cacheFile(fileName, content) {
+  const safeFileName = path.basename(fileName);
+  console.log(`[MCP] Caching file: ${safeFileName}`);
+  const filePath = path.join(CACHE_DIR, safeFileName);
+  if (String(content).startsWith('data:image')) {
     const base64Data = content.replace(/^data:image\/\w+;base64,/, "");
     fs.writeFileSync(filePath, base64Data, 'base64');
   } else {
     fs.writeFileSync(filePath, content);
   }
-
-  res.status(200).json({
-    status: 'success',
-    message: `File cached successfully by MCP file cache tool.`,
-    path: filePath
-  });
-});
+  return { fileName: safeFileName, path: filePath };
+}
 
 // Run Express Server on Port 5001
 const HTTP_PORT = process.env.MCP_PORT || 5001;
@@ -118,6 +157,40 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['fileName', 'content']
         }
+      },
+      {
+        name: 'mcp_classify_design_intent',
+        description: 'Classify whether a design request is a single design or carousel and return slide-count reasoning.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            designType: { type: 'string' },
+            userCopyTexts: { type: 'array', items: { type: 'string' } },
+            referenceImageFiles: { type: 'array', items: { type: 'string' } },
+            userAssetFiles: { type: 'array', items: { type: 'string' } }
+          },
+          required: ['designType', 'userCopyTexts']
+        }
+      },
+      {
+        name: 'mcp_generate_design_schema',
+        description: 'Generate a deterministic Deconstruct AI design schema from supplied references, assets, and exact copy.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            designType: { type: 'string' },
+            userCopyTexts: { type: 'array', items: { type: 'string' } },
+            brandPalette: { type: 'array', items: { type: 'string' } },
+            referenceImageFiles: { type: 'array', items: { type: 'string' } },
+            userAssetFiles: { type: 'array', items: { type: 'string' } }
+          },
+          required: ['designType', 'userCopyTexts']
+        }
+      },
+      {
+        name: 'mcp_get_integration_status',
+        description: 'Return n8n, Flowise, Pinecone, and MCP HTTP wiring status.',
+        inputSchema: { type: 'object', properties: {} }
       }
     ]
   };
@@ -139,18 +212,29 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'mcp_cache_file') {
     const { fileName, content } = args;
-    const filePath = path.join(CACHE_DIR, fileName);
-    
-    if (content.startsWith('data:image')) {
-      const base64Data = content.replace(/^data:image\/\w+;base64,/, "");
-      fs.writeFileSync(filePath, base64Data, 'base64');
-    } else {
-      fs.writeFileSync(filePath, content);
-    }
-    
+    const cached = cacheFile(fileName, content);
     return {
-      content: [{ type: 'text', text: `File '${fileName}' cached successfully in MCP storage.` }]
+      content: [{ type: 'text', text: `File '${cached.fileName}' cached successfully in MCP storage.` }]
     };
+  }
+
+  if (name === 'mcp_classify_design_intent') {
+    const intent = classifyDesignIntent(args || {});
+    return { content: [{ type: 'text', text: JSON.stringify(intent, null, 2) }] };
+  }
+
+  if (name === 'mcp_generate_design_schema') {
+    if (!args?.designType || !Array.isArray(args.userCopyTexts) || args.userCopyTexts.length === 0) {
+      throw new Error('designType and userCopyTexts[] are required.');
+    }
+    const design = await generateDesignSchema(args, { id: 'mcp_stdio_user', username: 'mcp-stdio' });
+    const cached = cacheFile(`${design.id}.schema.json`, JSON.stringify(design, null, 2));
+    return { content: [{ type: 'text', text: JSON.stringify({ designId: design.id, mode: design.mode, slideCount: design.slides.length, cachePath: cached.path, intent: design.intent }, null, 2) }] };
+  }
+
+  if (name === 'mcp_get_integration_status') {
+    const status = await getIntegrationStatus();
+    return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);
