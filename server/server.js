@@ -199,11 +199,11 @@ app.post('/api/designs/generate', authenticateToken, async (req, res) => {
       message: error.message,
       stack: error.stack
     });
-    const imageRefusal = /without returning a generated image|IMAGE_OTHER|could not generate the image/i.test(error.message || '');
+    const imageRefusal = /without returning a generated image|IMAGE_OTHER|could not generate the image|no image after fallback/i.test(error.message || '');
     res.status(imageRefusal ? 422 : 500).json({
       message: imageRefusal
-        ? 'The AI image service completed the request but did not return a generated image. Try simplifying the prompt or using fewer/clearer reference images while we inspect the provider response details.'
-        : 'We could not generate the image right now. Please try again in a moment or use a different reference image.',
+        ? 'The image provider accepted the request but did not return an image. This is a provider-side no-image response, not proof that your reference or asset images are invalid. We have logged the failure details for inspection.'
+        : 'We could not generate the image right now. Please try again in a moment.',
       code: imageRefusal ? 'IMAGE_PROVIDER_RETURNED_NO_IMAGE' : 'IMAGE_GENERATION_FAILED',
       failureId
     });
