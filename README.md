@@ -108,10 +108,11 @@ cp .env.example .env.local
 # edit .env.local locally; never commit real secrets
 ```
 
-Local development is deterministic by default:
+Local development disables AI image generation by default:
 - `ENABLE_REAL_IMAGE_GENERATION=false` prevents accidental paid model/image calls.
+- When image generation is enabled, final images must come from the n8n/Flowise/Gemini workflow only; the app must not synthesize final images locally.
 - `ENABLE_EXTERNAL_INTEGRATION_CHECKS=false` keeps verification local unless explicitly enabled.
-- Pinecone credentials are optional. Without them, the app reports local fallback mode.
+- Pinecone credentials are optional. Without them, the app reports local memory-only mode.
 
 ### 2. Start the local stack with Docker Compose
 

@@ -174,7 +174,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'mcp_generate_design_schema',
-        description: 'Generate a deterministic Deconstruct AI design schema from supplied references, assets, and exact copy.',
+        description: 'Generate an AI-only Deconstruct AI design record from supplied references, assets, and exact copy.',
         inputSchema: {
           type: 'object',
           properties: {

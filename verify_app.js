@@ -160,7 +160,7 @@ async function runTests() {
 
 
 
-  // Test 6: YouTube thumbnail with one reference and two assets must remain one composite design
+  // Test 6: YouTube thumbnail with one reference and two assets must remain one AI-generated design
   console.log('\nTest 6: YouTube Thumbnail multi-asset single-output regression...');
   const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
   const thumbnailPayload = {

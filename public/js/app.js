@@ -1,4 +1,4 @@
-// Deconstruct AI — Core Client Orchestrator & Canvas Engine
+// Deconstruct AI — Core Client Orchestrator
 
 // App State
 const state = {
@@ -13,8 +13,6 @@ const state = {
   generationMode: 'single',
   history: [],
   templates: [],
-  canvasZoom: 1.0,
-  isGridVisible: true,
   currentDesign: null,
   activeSlideIndex: 0,
   totalSlidesCount: 1
@@ -63,8 +61,6 @@ const downloadBtn = document.getElementById('download-design-btn');
 const loaderOverlay = document.getElementById('loader-overlay');
 const renderCanvas = document.getElementById('render-canvas');
 const ctx = renderCanvas.getContext('2d');
-const coordinateGridOverlay = document.getElementById('coordinate-grid-overlay');
-const canvasContainer = document.getElementById('canvas-container');
 const generationEvidencePill = document.getElementById('generation-evidence-pill');
 
 // Initialize App
@@ -532,7 +528,7 @@ function escapeHtml(value) {
 }
 
 // ----------------------------------------------------
-// Dynamic Canvas Compositing Engine (Client-Side Rendering)
+// AI Image Preview Renderer
 // ----------------------------------------------------
 
 async function drawDesignOnCanvas(design) {
@@ -541,15 +537,11 @@ async function drawDesignOnCanvas(design) {
     throw new Error('The generated image is not ready yet. Please try again.');
   }
 
-  const schema = slide.layoutSchema || {};
-  const canvasSize = schema.canvasSize || { width: 1280, height: 720 };
-  renderCanvas.width = canvasSize.width;
-  renderCanvas.height = canvasSize.height;
-
   const generated = await loadImage(slide.generatedImageUrl);
+  renderCanvas.width = generated.naturalWidth || generated.width || 1280;
+  renderCanvas.height = generated.naturalHeight || generated.height || 720;
   ctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
   ctx.drawImage(generated, 0, 0, renderCanvas.width, renderCanvas.height);
-  if (coordinateGridOverlay) coordinateGridOverlay.innerHTML = '';
   downloadBtn.removeAttribute('disabled');
 }
 
@@ -562,133 +554,6 @@ function loadImage(src) {
     img.onerror = (e) => reject(e);
     img.src = resolveReachableUrl(src);
   });
-}
-
-function wrapText(c, text, maxWidth) {
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = words[0];
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const width = c.measureText(currentLine + " " + word).width;
-    if (width < maxWidth) {
-      currentLine += " " + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
-    }
-  }
-  lines.push(currentLine);
-  return lines;
-}
-
-function adjustColorBrightness(hex, percent) {
-  let R = parseInt(hex.substring(1, 3), 16);
-  let G = parseInt(hex.substring(3, 5), 16);
-  let B = parseInt(hex.substring(5, 7), 16);
-
-  R = parseInt(R * (100 + percent) / 100);
-  G = parseInt(G * (100 + percent) / 100);
-  B = parseInt(B * (100 + percent) / 100);
-
-  R = (R < 255) ? R : 255;  
-  G = (G < 255) ? G : 255;  
-  B = (B < 255) ? B : 255;  
-
-  R = (R > 0) ? R : 0;
-  G = (G > 0) ? G : 0;
-  B = (B > 0) ? B : 0;
-
-  const rHex = R.toString(16).padStart(2, '0');
-  const gHex = G.toString(16).padStart(2, '0');
-  const bHex = B.toString(16).padStart(2, '0');
-
-  return `#${rHex}${gHex}${bHex}`;
-}
-
-// ----------------------------------------------------
-// Interactive Coordinates Grid Mapping
-// ----------------------------------------------------
-
-function drawCoordinateOverlayGrid(design) {
-  // Clear the transparent HTML overlay
-  if (!coordinateGridOverlay) return;
-  coordinateGridOverlay.innerHTML = '';
-  
-  if (!state.isGridVisible) return;
-
-  const schema = design.layoutSchema;
-  
-  // Calculate relative scaling based on visual container width
-  const renderWidth = renderCanvas.clientWidth;
-  const actualWidth = renderCanvas.width;
-  const ratio = renderWidth / actualWidth;
-
-  // 1. Text Bounding Box Marker
-  const textX = schema.textConfig.align === 'center'
-    ? schema.textConfig.x - schema.textConfig.maxWidth / 2
-    : schema.textConfig.x;
-  
-  // Mock bounding height approx based on font size and lines
-  const textLinesCount = wrapText(ctx, design.userCopyText, schema.textConfig.maxWidth).length;
-  const boxH = textLinesCount * schema.textConfig.lineHeight;
-  const boxY = schema.textConfig.y - boxH / 2;
-
-  createTextMarkerElement(
-    textX * ratio,
-    boxY * ratio,
-    schema.textConfig.maxWidth * ratio,
-    boxH * ratio,
-    `Text Layout Box: X=${schema.textConfig.x}, Y=${schema.textConfig.y}`
-  );
-
-  // 2. Asset Box Marker
-  const asset = schema.assetConfig;
-  createTextMarkerElement(
-    asset.x * ratio,
-    asset.y * ratio,
-    asset.width * ratio,
-    asset.height * ratio,
-    `Asset Bounding: X=${asset.x}, Y=${asset.y}, Size=${asset.width}x${asset.height}`
-  );
-}
-
-function createTextMarkerElement(left, top, w, h, label) {
-  const box = document.createElement('div');
-  box.className = 'grid-marker-box';
-  box.style.left = `${left}px`;
-  box.style.top = `${top}px`;
-  box.style.width = `${w}px`;
-  box.style.height = `${h}px`;
-  
-  const textLabel = document.createElement('span');
-  textLabel.className = 'grid-marker-label';
-  textLabel.textContent = label;
-  
-  box.appendChild(textLabel);
-  if (coordinateGridOverlay) coordinateGridOverlay.appendChild(box);
-}
-
-function toggleCoordinateGrid() {
-  state.isGridVisible = !state.isGridVisible;
-  if (state.currentDesign) {
-    drawDesignOnCanvas(state.currentDesign, null); // Refills canvas and grid overlay state
-  }
-}
-
-// ----------------------------------------------------
-// Zoom Actions
-// ----------------------------------------------------
-
-function zoomCanvas(amount) {
-  state.canvasZoom = Math.min(Math.max(state.canvasZoom + amount, 0.4), 2.5);
-  canvasContainer.style.transform = `scale(${state.canvasZoom})`;
-}
-
-function resetZoom() {
-  state.canvasZoom = 1.0;
-  canvasContainer.style.transform = `scale(1.0)`;
 }
 
 // ----------------------------------------------------

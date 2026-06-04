@@ -120,7 +120,7 @@
     <main class="workspace">
       <div class="workspace-header">
         <h1>Design Workspace</h1>
-        <p>Analyze reference structures and overlay personalized text/assets in real time.</p>
+        <p>Analyze reference structures and generate AI-only designs from your text/assets.</p>
       </div>
 
       <div class="workspace-grid">
@@ -171,7 +171,7 @@
                   <input type="radio" name="generationMode" value="single" checked onchange="updateGenerationModeSelection(this)">
                   <i class="fa-solid fa-image"></i>
                   <span class="card-title">Single Design</span>
-                  <span class="card-ratio">Composite all selected assets into one final image</span>
+                  <span class="card-ratio">Generate one final AI image using all selected assets</span>
                 </label>
                 <label class="generation-mode-card">
                   <input type="radio" name="generationMode" value="carousel" onchange="updateGenerationModeSelection(this)">
@@ -265,13 +265,8 @@
           <!-- Live Canvas Container -->
           <div class="canvas-wrapper">
             <div id="canvas-container" class="canvas-holder">
-              <!-- Render engine element -->
+              <!-- AI-generated image preview/download surface. -->
               <canvas id="render-canvas" width="1280" height="720"></canvas>
-              
-              <!-- Transparent overlay mapping coordinates on top of the image -->
-              <div id="coordinate-grid-overlay" class="grid-overlay">
-                <!-- Visual boxes mapped dynamically -->
-              </div>
             </div>
           </div>
 

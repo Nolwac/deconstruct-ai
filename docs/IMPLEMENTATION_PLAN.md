@@ -1,10 +1,10 @@
 # Deconstruct AI Implementation Plan
 
 ## Goal
-Ship a working API-first design-generation platform that accepts one or more reference images, one or more asset images, and supplied text; classifies single-design vs carousel intent; produces a faithful design schema/rendering; integrates with n8n, Flowise, Pinecone, and local MCP-style tools; and is verified with automated and live browser tests.
+Ship a working API-first design-generation platform that accepts one or more reference images, one or more asset images, and supplied text; classifies single-design vs carousel intent; produces AI-generated final images through n8n/Flowise/Gemini only; integrates with Pinecone and local MCP-style tools for metadata/audit support; and is verified with automated and live browser tests.
 
 ## Constraints
-- Do not burn the limited Gemini API budget during development. Default to deterministic local generation and only call paid image/vision models when explicitly enabled.
+- Do not burn the limited Gemini API budget during development. Keep AI image generation disabled unless explicitly enabled, and never substitute local synthesis for final output.
 - Store secrets only in ignored local env files.
 - Commit after verified milestones.
 - UI must be genuinely usable: drag/drop works, no browser `alert()` UX for workflow errors, and backend/network calls are visible.
@@ -13,7 +13,7 @@ Ship a working API-first design-generation platform that accepts one or more ref
 1. **Core API pipeline**
    - Add an explicit generation pipeline layer under `server/services`.
    - Fix slide-count logic: YouTube thumbnail stays one slide even with multiple asset images; carousel formats can produce multiple slides.
-   - Generate rich schemas with `assets[]`, text layers, background/style treatment, orchestration metadata, and warnings.
+   - Store rich Flowise/Gemini orchestration metadata, template-rule evidence, generated image URLs, and warnings without client-side image-construction schemas.
    - Persist designs and local template/style memory.
 
 2. **Integration services**

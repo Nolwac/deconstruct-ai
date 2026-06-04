@@ -14,8 +14,10 @@ assert(appJs.includes('setupFileDropZones'), 'Drag/drop setup function missing.'
 assert(appJs.includes("zone.addEventListener('drop'"), 'Drop event listener missing.');
 assert(appJs.includes('DataTransfer'), 'Dropped files are not transferred into file input state.');
 assert(appJs.includes('/api/integrations/status'), 'Integration status endpoint is not wired in UI.');
-assert(appJs.includes('drawAssetLayer'), 'Multi-asset canvas rendering function missing.');
+assert(appJs.includes('drawDesignOnCanvas'), 'AI image preview renderer missing.');
+assert(!appJs.includes('draw' + 'Asset' + 'Layer'), 'Legacy asset drawing helper must not exist.');
+assert(!appJs.includes('layout' + 'Schema'), 'Frontend must not depend on legacy image-construction schemas.');
 assert(css.includes('.file-upload-zone.drag-over'), 'Drag-over CSS state missing.');
 assert(css.includes('.toast-region'), 'Toast feedback CSS missing.');
 assert(css.includes('.integration-status-panel'), 'Integration status CSS missing.');
-console.log('✔ UI has no alert() calls, drag/drop wiring, toast feedback, integration status, and multi-asset rendering hooks.');
+console.log('✔ UI has no alert() calls, drag/drop wiring, toast feedback, integration status, and no legacy asset drawing helper.');

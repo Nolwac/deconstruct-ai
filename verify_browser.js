@@ -72,7 +72,7 @@ async function main() {
     assert(await page.locator('#carousel-controls.hidden').count() === 1, 'Carousel controls should be hidden for thumbnail.');
     assert(await page.locator('#download-design-btn:not([disabled])').count() === 1, 'Download button should become enabled.');
     await page.screenshot({ path: path.join(SHOT_DIR, 'browser-thumbnail.png'), fullPage: true });
-    console.log('✔ YouTube thumbnail live flow generated one composite design from two assets via n8n/Flowise.');
+    console.log('✔ YouTube thumbnail live flow generated one AI image from two assets via n8n/Flowise.');
 
     await page.evaluate(() => {
       const radio = document.querySelector('input[name="designType"][value="LinkedIn Carousel"]');
