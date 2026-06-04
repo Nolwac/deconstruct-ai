@@ -97,6 +97,14 @@
 
       <!-- Navigation/History -->
       <div class="sidebar-menu-section">
+        <h4 class="menu-title"><i class="fa-solid fa-layer-group"></i> My Saved Templates</h4>
+        <div id="template-list" class="history-list template-list">
+          <div class="history-empty compact-empty">
+            <i class="fa-regular fa-clone"></i>
+            <p>No saved templates yet</p>
+          </div>
+        </div>
+
         <h4 class="menu-title"><i class="fa-solid fa-history"></i> My Portfolio History</h4>
         <div id="design-history-list" class="history-list">
           <!-- Dynamically populated portfolio history cards -->
@@ -154,7 +162,27 @@
               </div>
             </div>
 
-            <!-- 2. Style Reference Image -->
+
+            <!-- 2. Output Structure Selector -->
+            <div class="form-group border-top">
+              <label class="section-label">Output Structure</label>
+              <div class="generation-mode-grid" role="radiogroup" aria-label="Output structure">
+                <label class="generation-mode-card active">
+                  <input type="radio" name="generationMode" value="single" checked onchange="updateGenerationModeSelection(this)">
+                  <i class="fa-solid fa-image"></i>
+                  <span class="card-title">Single Design</span>
+                  <span class="card-ratio">Composite all selected assets into one final image</span>
+                </label>
+                <label class="generation-mode-card">
+                  <input type="radio" name="generationMode" value="carousel" onchange="updateGenerationModeSelection(this)">
+                  <i class="fa-solid fa-table-cells-large"></i>
+                  <span class="card-title">Carousel / Multi-slide</span>
+                  <span class="card-ratio">Create one slide per headline or asset</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 3. Style Reference Image -->
             <div class="form-group border-top">
               <label class="section-label">1. Style Reference Design Template</label>
               <div class="input-source-toggle">
@@ -173,7 +201,7 @@
               </div>
             </div>
 
-            <!-- 3. User Asset Image -->
+            <!-- 4. User Asset Image -->
             <div class="form-group border-top">
               <label class="section-label">2. Your Asset (Product/Avatar)</label>
               <div class="input-source-toggle">
@@ -192,15 +220,15 @@
               </div>
             </div>
 
-            <!-- 4. Typography Caption Text -->
+            <!-- 5. Typography Caption Text -->
             <div class="form-group border-top">
-              <label for="headline-input" class="section-label">3. Target Text Copy (Headline)</label>
+              <label for="headline-input" class="section-label">5. Target Text Copy (Headline)</label>
               <textarea id="headline-input" class="text-area-input" rows="3" placeholder="Enter slide headlines separated by | for each slide (e.g. Slide 1 Headline | Slide 2 Headline | Slide 3 Headline)..." required></textarea>
             </div>
 
-            <!-- 5. Brand Color Palette Customizer -->
+            <!-- 6. Brand Color Palette Customizer -->
             <div class="form-group border-top">
-              <label class="section-label">4. Brand Palette Customizer (Optional)</label>
+              <label class="section-label">6. Brand Palette Customizer (Optional)</label>
               <p class="helper-text">Select background and theme highlights or let the model extract it.</p>
               <div class="color-picker-row">
                 <div class="color-picker-item">
@@ -229,10 +257,8 @@
         <section class="preview-panel glass-card">
           <div class="panel-section-header flex-between">
             <h3><i class="fa-regular fa-eye"></i> Production Rendering Canvas</h3>
-            <div class="canvas-actions">
-              <button type="button" class="action-btn" onclick="zoomCanvas(0.1)" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
-              <button type="button" class="action-btn" onclick="zoomCanvas(-0.1)" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
-              <button type="button" class="action-btn" onclick="resetZoom()" title="Reset View"><i class="fa-solid fa-expand"></i></button>
+            <div class="canvas-actions compact-evidence">
+              <span id="generation-evidence-pill" class="meta-badge muted"><i class="fa-solid fa-wand-magic-sparkles"></i> Waiting for generation</span>
             </div>
           </div>
 
@@ -265,9 +291,6 @@
             <div class="export-actions">
               <button id="download-design-btn" class="btn btn-secondary" onclick="downloadGeneratedDesign()" disabled>
                 <i class="fa-solid fa-download"></i> Download PNG
-              </button>
-              <button type="button" class="btn btn-tertiary" onclick="toggleCoordinateGrid()">
-                <i class="fa-solid fa-border-none"></i> Toggle Grid Overlays
               </button>
             </div>
             <!-- Live Info Log -->

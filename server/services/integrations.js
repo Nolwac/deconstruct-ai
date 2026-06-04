@@ -23,15 +23,32 @@ async function fetchJson(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   }
 }
 
-async function getIntegrationStatus() {
+function buildPublicServiceUrl(publicOrigin, port) {
+  if (!publicOrigin) return null;
+  try {
+    const url = new URL(publicOrigin);
+    url.port = String(port);
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getIntegrationStatus(options = {}) {
   const n8nBaseUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
   const flowiseBaseUrl = process.env.FLOWISE_BASE_URL || 'http://localhost:3000';
   const mcpBaseUrl = process.env.MCP_HTTP_URL || 'http://localhost:5001';
+  const publicOrigin = options.publicOrigin || null;
+  const n8nPublicUrl = options.publicUrls?.n8n || buildPublicServiceUrl(publicOrigin, 5678);
+  const flowisePublicUrl = options.publicUrls?.flowise || buildPublicServiceUrl(publicOrigin, 3000);
 
   const [n8n, flowise, mcp, pinecone] = await Promise.all([
-    fetchJson(`${n8nBaseUrl}/healthz`).then(r => ({ name: 'n8n', configured: true, baseUrl: n8nBaseUrl, ok: r.ok, status: r.status, error: r.error || null })),
-    fetchJson(`${flowiseBaseUrl}/api/v1/ping`).then(r => ({ name: 'flowise', configured: true, baseUrl: flowiseBaseUrl, ok: r.ok, status: r.status, error: r.error || null })),
-    fetchJson(`${mcpBaseUrl}/mcp/status`).then(r => ({ name: 'mcp-http', configured: true, baseUrl: mcpBaseUrl, ok: r.ok, status: r.status, error: r.error || null })),
+    fetchJson(`${n8nBaseUrl}/healthz`).then(r => ({ name: 'n8n', configured: true, publicUrl: n8nPublicUrl, ok: r.ok, status: r.status, error: r.error || null })),
+    fetchJson(`${flowiseBaseUrl}/api/v1/ping`).then(r => ({ name: 'flowise', configured: true, publicUrl: flowisePublicUrl, ok: r.ok, status: r.status, error: r.error || null })),
+    fetchJson(`${mcpBaseUrl}/mcp/status`).then(r => ({ name: 'mcp-http', configured: true, ok: r.ok, status: r.status, error: r.error || null })),
     getPineconeStatus()
   ]);
 
@@ -51,10 +68,10 @@ async function getPineconeStatus() {
       name: 'pinecone',
       configured: false,
       ok: false,
-      mode: 'local-fallback',
+      mode: 'local-template-memory',
       indexName,
       namespace,
-      error: 'PINECONE_API_KEY missing; local template memory fallback is active.'
+      error: 'PINECONE_API_KEY missing; remote Pinecone sync is disabled, so template memory is stored locally.'
     };
   }
 
@@ -90,11 +107,12 @@ async function getPineconeStatus() {
 
 async function notifyN8n(payload) {
   const webhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/deconstruct-ai-generate';
+  const webhookTimeoutMs = Number(process.env.N8N_WEBHOOK_TIMEOUT_MS || 180000);
   const result = await fetchJson(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  }, 15000);
+  }, webhookTimeoutMs);
   return { attempted: true, ok: result.ok, status: result.status, error: result.error || null, response: result.json || null };
 }
 

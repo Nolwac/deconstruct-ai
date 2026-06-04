@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const loadEnv = require('./config/loadEnv');
 const { getIntegrationStatus } = require('./services/integrations');
 const { generateDesignSchema } = require('./services/generationPipeline');
+const { readJson, writeJson } = require('./services/storage');
 loadEnv(path.join(__dirname, '..'));
 
 const app = express();
@@ -22,6 +23,7 @@ app.use('/generated_images', express.static(path.join(__dirname, 'generated_imag
 // Paths to mock JSON databases
 const USERS_FILE = path.join(__dirname, 'users.json');
 const DESIGNS_FILE = path.join(__dirname, 'designs.json');
+const TEMPLATE_MEMORY_FILE = path.join(__dirname, 'template-memory.json');
 
 // Ensure database files exist
 const initFile = (filePath, initialData) => {
@@ -31,6 +33,7 @@ const initFile = (filePath, initialData) => {
 };
 initFile(USERS_FILE, []);
 initFile(DESIGNS_FILE, []);
+initFile(TEMPLATE_MEMORY_FILE, []);
 
 // Utility helpers for reading/writing mock databases
 const readDb = (filePath) => {
@@ -189,8 +192,21 @@ app.post('/api/designs/generate', authenticateToken, async (req, res) => {
       design: newDesign
     });
   } catch (error) {
-    console.error('[Generation Pipeline] Failed:', error);
-    res.status(500).json({ message: 'Generation pipeline failed.', error: error.message });
+    const failureId = 'gen_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    console.error('[Generation Pipeline] Failed:', {
+      failureId,
+      userId: req.user.id,
+      message: error.message,
+      stack: error.stack
+    });
+    const imageRefusal = /without returning a generated image|IMAGE_OTHER|could not generate the image/i.test(error.message || '');
+    res.status(imageRefusal ? 422 : 500).json({
+      message: imageRefusal
+        ? 'The AI image service completed the request but did not return a generated image. Try simplifying the prompt or using fewer/clearer reference images while we inspect the provider response details.'
+        : 'We could not generate the image right now. Please try again in a moment or use a different reference image.',
+      code: imageRefusal ? 'IMAGE_PROVIDER_RETURNED_NO_IMAGE' : 'IMAGE_GENERATION_FAILED',
+      failureId
+    });
   }
 });
 
@@ -204,8 +220,66 @@ app.get('/api/designs/history', authenticateToken, (req, res) => {
   res.status(200).json(userDesigns);
 });
 
-app.get('/api/integrations/status', authenticateToken, async (_req, res) => {
-  const status = await getIntegrationStatus();
+// ----------------------------------------------------
+// User-scoped Template Memory Routes
+// ----------------------------------------------------
+
+const userOwnsTemplate = (template, userId, designs = []) => {
+  if (!template || !template.templateId) return false;
+  if (template.userId === userId) return true;
+  // Backward-compatible ownership inference for older template-memory entries
+  // created before userId was stored on template records.
+  return designs.some(design => design.userId === userId && design.templateId === template.templateId);
+};
+
+app.get('/api/templates', authenticateToken, (req, res) => {
+  const templates = readJson(TEMPLATE_MEMORY_FILE, []);
+  const designs = readDb(DESIGNS_FILE);
+  const userTemplates = templates
+    .filter(template => userOwnsTemplate(template, req.user.id, designs))
+    .map(template => ({
+      templateId: template.templateId,
+      designType: template.designType,
+      mode: template.mode,
+      summary: template.summary,
+      source: template.source,
+      referenceImageCount: template.referenceImageCount || 0,
+      assetImageCount: template.assetImageCount || 0,
+      createdAt: template.createdAt
+    }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.status(200).json(userTemplates);
+});
+
+app.delete('/api/templates/:templateId', authenticateToken, (req, res) => {
+  const { templateId } = req.params;
+  const templates = readJson(TEMPLATE_MEMORY_FILE, []);
+  const designs = readDb(DESIGNS_FILE);
+  const target = templates.find(template => template.templateId === templateId);
+
+  if (!target || !userOwnsTemplate(target, req.user.id, designs)) {
+    return res.status(404).json({ message: 'Template not found for this user.' });
+  }
+
+  const remaining = templates.filter(template => template.templateId !== templateId);
+  writeJson(TEMPLATE_MEMORY_FILE, remaining);
+
+  logToMcp('template_deleted', { templateId, userId: req.user.id });
+  res.status(200).json({ message: 'Template deleted successfully.', templateId });
+});
+
+app.get('/api/integrations/status', authenticateToken, async (req, res) => {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const publicOrigin = `${protocol}://${host}`;
+  const status = await getIntegrationStatus({
+    publicOrigin,
+    publicUrls: {
+      n8n: req.headers['x-public-n8n-url'] || null,
+      flowise: req.headers['x-public-flowise-url'] || null
+    }
+  });
   res.status(200).json(status);
 });
 

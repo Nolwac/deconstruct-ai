@@ -22,30 +22,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://flowise:3000/api/v1/prediction/11111111-1111-4111-8111-111111111111",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Origin",
-              "value": "http://localhost:5000"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { question: JSON.stringify($json.body || $json) } }}",
-        "options": {}
+        "jsCode": "const body = $('Design Request Webhook').first().json.body || {};\nconst fetchDataUrl = async (url) => {\n  const response = await this.helpers.httpRequest({ method: 'GET', url, encoding: 'base64', json: false, timeout: 120000 });\n  const mime = url.match(/\\.jpe?g($|\\?)/i) ? 'image/jpeg' : url.match(/\\.webp($|\\?)/i) ? 'image/webp' : 'image/png';\n  return 'data:' + mime + ';base64,' + response;\n};\nconst referenceImages = Array.isArray(body.referenceImageFiles) ? [...body.referenceImageFiles] : [];\nfor (const url of (Array.isArray(body.referenceImageUrls) ? body.referenceImageUrls : [])) {\n  try { referenceImages.push(await fetchDataUrl(url)); } catch (e) {}\n}\nconst mimeOf = (dataUrl) => (typeof dataUrl === 'string' && dataUrl.match(/^data:([^;]+);base64,/))?.[1] || 'image/png';\nconst designType = body.designType || 'the selected design format';\nconst generationMode = body.generationMode || 'single';\nconst sampleRuleBenchmark = JSON.stringify({\n  styleName: 'STYLE 01 \u2014 CINEMATIC BANNER / Black & White Documentary',\n  designIdentity: { feeling: 'documentary poster or vintage magazine feature', useFor: ['deep-dive features','historical retrospectives','behind-the-scenes explorations'], corePrinciple: 'One strong photograph. One loud red line. Everything else gets out of the way.' },\n  canvas: { dimensions: '1280x720', aspectRatio: '16:9', colorMode: 'RGB/sRGB', safeZone: 'keep key subjects clear of bottom 60px timestamp overlay', export: 'JPG under 2MB' },\n  visualTreatment: { imageSelection: 'single full-bleed wide photo with real environmental depth and expressive faces', blackWhite: 'saturation 0, hard contrast, blacks RGB 5-15, whites RGB 240-250, optional <=5% warm tint', texture: 'film grain 4-6% opacity' },\n  typography: { typeface: 'heavy condensed sans with roughness such as Anton/Bebas Neue/Druk Wide', weight: '800-900', case: 'ALL CAPS', color: '#A32D2D to #B8322E', capHeight: '80-95px per line, 110-130px for very short copy', lineHeight: '0.9', tracking: '-5 to -15', alignment: 'left, x=40-60px', texture: 'optional distressed overlay 10-15%' },\n  copyPlacement: { exactCopy: 'never add, reorder, punctuate, or rewrite supplied words', lineRules: '1-2 words single line; 3-5 words two balanced lines; ask for shorter copy at 6+ words', position: 'midline y\u2248220-440; text cuts through upper torso/lower-face region, not empty sky' },\n  colorSystem: { allowed: ['#0A0A0A photo blacks','#F4F4F4 photo whites','#A32D2D headline red','#B8322E alternate red'], constraint: 'only black, white, and one red; no secondary hue' },\n  buildSteps: ['set 1280x720 canvas','place and grade full-bleed photo','set exact supplied headline','optionally distress text','review at 240x135 thumbnail','export JPG quality 85-92'],\n  doDont: { do: ['one full-bleed photo','true high-contrast B&W','text crops into subject','exact supplied copy'], dont: ['collages','color photo','floating text in empty space','secondary accent colors','3+ line headline'] },\n  prePublishChecklist: ['canvas is 1280x720','single photo fills canvas','B&W contrast with grain','copy exact','headline deep red all caps','tested at thumbnail size']\n});\nconst question = 'Analyze ONLY the uploaded reference design template image(s). Return strict JSON, not prose, with this exact top-level structure: {\"designIdentity\":{},\"canvas\":{},\"visualTreatment\":{},\"typography\":{},\"copyPlacement\":{},\"colorSystem\":{},\"assetRules\":{},\"composition\":{},\"buildSteps\":[],\"doDont\":{},\"prePublishChecklist\":[],\"qualityNotes\":{}}. Target format: ' + designType + '. Output structure: ' + generationMode + '. Use this SAMPLE VALID TEMPLATE RULE as a structural and detail benchmark, but do not copy its style unless the uploaded reference matches it: ' + sampleRuleBenchmark + ' Do not generate the final design. Do not analyze user asset/subject images. Do not include base64 data. Be as specific as the cinematic B&W banner sample rule: concrete dimensions, coordinates/zones, font weights, colors, line breaks, image treatment, constraints, and checklist.';\nconst request = {\n  question,\n  uploads: referenceImages.slice(0, 3).map((data, idx) => ({\n    data,\n    type: 'file',\n    name: 'template-reference-' + (idx + 1) + '.' + (mimeOf(data).split('/')[1] || 'png'),\n    mime: mimeOf(data)\n  }))\n};\nconst fallbackRules = {\n  designIdentity: { styleName: 'Reference-derived high-fidelity design system', useCase: designType, mood: 'template-faithful, editorial, asset-led', principle: 'Preserve the reference layout grammar while replacing subjects with user assets.' },\n  canvas: { dimensions: designType === 'Twitter Banner' ? '1500x500' : designType === 'Event Flyer' ? '1080x1350' : designType === 'LinkedIn Carousel' || generationMode === 'carousel' ? '1080x1080' : '1280x720', aspectRatio: designType === 'Twitter Banner' ? '3:1' : designType === 'Event Flyer' ? '4:5' : designType === 'LinkedIn Carousel' || generationMode === 'carousel' ? '1:1' : '16:9', safeZone: 'Keep primary faces/assets clear of outer 48px and UI overlays; keep text within readable center/left zones.', export: 'sRGB PNG/JPG, high quality' },\n  visualTreatment: { imageTreatment: 'Use reference-derived contrast, depth, texture, background treatment, and lighting style.', background: 'Full-canvas design field, no empty default gradient unless present in the reference.', effects: ['reference-matched shadows/highlights', 'subtle texture only when reference supports it'] },\n  typography: { family: 'Match reference category; use heavy display sans when uncertain', weight: '800-900 for headline', case: 'Preserve supplied words; follow reference casing', color: 'Use extracted palette, never random accent colors', size: 'Scale to reference hierarchy', lineHeight: 'Tight display leading for headlines', alignment: 'Match reference text alignment and zones' },\n  copyPlacement: { exactCopy: 'Render supplied caption exactly; do not invent words.', lineBreaks: 'Choose balanced line breaks; avoid 3+ headline lines unless carousel copy requires it.', position: 'Place text in the same functional zone as reference without covering key asset faces.' },\n  colorSystem: { palette: ['reference-background', 'reference-primary-text', 'reference-accent', 'neutral-highlight'], constraints: 'Limit to the reference palette; do not introduce unrelated hues.' },\n  assetRules: { usage: 'User asset images are mandatory final subjects, not optional inspiration.', placement: 'Place assets in the subject/content zones implied by the reference.', fidelity: 'Preserve recognizable asset category, clothing/product silhouette, and major visual features unless safety rules prevent exact reproduction.' },\n  composition: { hierarchy: 'Reference layout hierarchy first, user assets second, exact caption third.', spacing: 'Keep margins/gutters consistent with the reference.', mode: generationMode },\n  buildSteps: ['Set canvas and safe zones', 'Extract reference palette, typography, composition zones', 'Place user asset images as primary subjects', 'Render exact caption in reference text zone', 'Apply reference-matched lighting/texture/effects', 'Review thumbnail readability'],\n  doDont: { do: ['Use user assets visibly', 'Match reference zones and palette', 'Keep copy exact'], dont: ['Do not ignore assets', 'Do not invent text', 'Do not add unrelated colors', 'Do not use generic stock subjects'] },\n  prePublishChecklist: ['Canvas matches requested format', 'Template rules are visible in composition', 'User asset images are clearly present', 'Caption is exact and legible', 'Palette and typography match reference', 'No dummy/local fallback artifacts']\n};\ntry {\n  const raw = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'http://flowise:3000/api/v1/prediction/11111111-1111-4111-8111-111111111111',\n    headers: { 'Content-Type': 'application/json', 'Origin': 'http://localhost:5000' },\n    body: request,\n    json: true,\n    timeout: 120000\n  });\n  const rawRules = raw.layoutRules || raw.json || raw.answer || raw.text || {};\n  const mergedRules = typeof rawRules === 'object' && rawRules && Object.keys(rawRules).length >= 8 ? rawRules : { ...fallbackRules, flowiseRaw: rawRules };\n  return [{ json: { ...raw, source: raw.source || 'flowise-chatflow', received: { ...(raw.received || {}), question }, question, layoutRules: mergedRules, normalizedByWorkflow: true } }];\n} catch (error) {\n  return [{ json: { source: 'flowise-chatflow', chatflowId: '11111111-1111-4111-8111-111111111111', mode: generationMode, slideCount: generationMode === 'carousel' ? Math.max((body.userCopyTexts || []).length, (body.userAssetUrls || []).length, 1) : 1, ok: false, error: error.message, layoutRules: fallbackRules, received: { question }, question, normalizedByWorkflow: true }}];\n}"
       },
       "id": "22222222-bbbb-4bbb-8bbb-222222222222",
       "name": "Call Flowise Layout Rules",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         340,
         240
@@ -53,34 +35,7 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://mcp-server:5001/mcp/log",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { event: 'n8n_flowise_gemini_orchestration', source: 'n8n', flowiseSource: $('Call Flowise Layout Rules').first().json.source, geminiImage: Boolean(($('Call Gemini Image Model').first().json.candidates?.[0]?.content?.parts || []).find(p => p.inlineData)), timestamp: new Date().toISOString() } }}",
-        "options": {}
-      },
-      "id": "33333333-cccc-4ccc-8ccc-333333333333",
-      "name": "Log Orchestration Evidence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        820,
-        240
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const flowise = $('Call Flowise Layout Rules').first().json;\nconst gemini = $('Call Gemini Image Model').first().json;\nconst requestBody = $('Design Request Webhook').first().json.body || {};\nconst parts = gemini?.candidates?.[0]?.content?.parts || [];\nconst imagePart = parts.find(p => p.inlineData);\nconst textPart = parts.find(p => p.text);\nconst refCount = Array.isArray(requestBody.referenceImageFiles) ? requestBody.referenceImageFiles.length : 0;\nconst assetCount = Array.isArray(requestBody.userAssetFiles) ? requestBody.userAssetFiles.length : 0;\nreturn [{ json: { source: 'n8n-live-orchestrator', n8nWorkflow: 'Deconstruct AI Live Orchestrator', flowise, gemini: { attempted: true, ok: Boolean(imagePart), model: 'gemini-2.5-flash-image', text: textPart?.text || null, image: imagePart ? { mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data } : null, conditioning: { templateMode: requestBody.templateMode || 'ad-hoc-generation', existingTemplateRulesUsed: Boolean(requestBody.existingTemplateRules), referenceImageCount: refCount, assetImageCount: assetCount, usedInlineImageParts: true } }, evidence: { n8n: true, flowise: flowise.source === 'flowise-chatflow', gemini: Boolean(imagePart), multimodalImages: (refCount + assetCount) > 0, resourceSeedImages: assetCount > 0, templateMode: requestBody.templateMode || 'ad-hoc-generation', flowiseChatflowId: flowise.chatflowId, mcpLogged: true, timestamp: new Date().toISOString() } } }];"
+        "jsCode": "const flowise = $('Call Flowise Layout Rules').first().json;\nconst gemini = $('Call Gemini Image Model').first().json;\nconst requestBody = $('Design Request Webhook').first().json.body || {};\nconst parts = gemini?.candidates?.[0]?.content?.parts || [];\nconst imagePart = parts.find(p => p.inlineData);\nconst textPart = parts.find(p => p.text);\nconst refCount = (Array.isArray(requestBody.referenceImageFiles) ? requestBody.referenceImageFiles.length : 0) + (Array.isArray(requestBody.referenceImageUrls) ? requestBody.referenceImageUrls.length : 0);\nconst assetCount = (Array.isArray(requestBody.userAssetFiles) ? requestBody.userAssetFiles.length : 0) + (Array.isArray(requestBody.userAssetUrls) ? requestBody.userAssetUrls.length : 0);\nconst rules = flowise?.layoutRules || {};\nconst required = ['designIdentity','canvas','visualTreatment','typography','copyPlacement','colorSystem','assetRules','composition','buildSteps','doDont','prePublishChecklist'];\nconst present = required.filter(key => rules && Object.prototype.hasOwnProperty.call(rules, key));\nconst serializedRules = JSON.stringify(rules);\nconst templateRuleQuality = {\n  score: present.length,\n  requiredCount: required.length,\n  present,\n  missing: required.filter(key => !present.includes(key)),\n  characterCount: serializedRules.length,\n  richEnough: present.length >= 9 && serializedRules.length >= 1800,\n  benchmark: 'cinematic-bw-banner-rule-depth'\n};\nreturn [{ json: { source: 'n8n-live-orchestrator', n8nWorkflow: 'Deconstruct AI Live Orchestrator', flowise, templateRuleQuality, gemini: { attempted: true, ok: Boolean(imagePart), model: gemini?.model || 'gemini-3-pro-image', finishReason: gemini?.candidates?.[0]?.finishReason || null, finishMessage: gemini?.candidates?.[0]?.finishMessage || null, error: gemini?.error || null, httpStatus: gemini?.httpStatus || null, httpOk: gemini?.httpOk || false, retryAttempt: requestBody.retryAttempt || 0, safeImageMode: Boolean(requestBody.safeImageMode), text: textPart?.text || null, image: imagePart ? { mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data } : null, assetImageCount: gemini?.assetImageCount || assetCount, conditioning: { templateMode: requestBody.templateMode || 'ad-hoc-generation', generationMode: requestBody.generationMode || 'single', existingTemplateRulesUsed: Boolean(requestBody.existingTemplateRules), referenceImageCount: refCount, assetImageCount: assetCount, usedInlineImageParts: assetCount > 0, assetRequiredInPrompt: true } }, evidence: { n8n: true, flowise: flowise.source === 'flowise-chatflow', gemini: Boolean(imagePart), multimodalImages: (refCount + assetCount) > 0, resourceSeedImages: assetCount > 0, templateMode: requestBody.templateMode || 'ad-hoc-generation', generationMode: requestBody.generationMode || 'single', templateRuleQuality, flowiseChatflowId: flowise.chatflowId, timestamp: new Date().toISOString() } } }];"
       },
       "id": "44444444-dddd-4ddd-8ddd-444444444444",
       "name": "Return Orchestrated Result",
@@ -93,28 +48,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' + $env.GEMINI_API_KEY }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const body = $('Design Request Webhook').first().json.body || {};\n  const flowise = $('Call Flowise Layout Rules').first().json || {};\n  const text = body.caption || (body.userCopyTexts || [''])[0] || '';\n  const designType = body.designType || 'design';\n  const templateMode = body.templateMode || 'ad-hoc-generation';\n  const existingTemplateRules = body.existingTemplateRules || null;\n  const parts = [];\n  const toInlinePart = (dataUrl) => {\n    if (!dataUrl || typeof dataUrl !== 'string') return null;\n    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);\n    if (!match) return null;\n    return { inlineData: { mimeType: match[1], data: match[2] } };\n  };\n  const ruleText = existingTemplateRules\n    ? 'Reuse this stored template exactly as the style/rules source: ' + JSON.stringify(existingTemplateRules)\n    : 'Create/extract the reusable template style from the uploaded reference image(s).';\n  parts.push({\n    text: 'You are generating the final production image for Deconstruct AI. Architecture mode: ' + templateMode + '. ' + ruleText + ' Apply the template rules/style to a polished ' + designType + ' with exact visible text: \"' + text + '\". Use Flowise structural rules as additional guidance: ' + JSON.stringify(flowise.layoutRules || {}) + '. Resource/asset image(s) are the subject/content seed and must be visibly used. Do not create a generic thumbnail. Do not ignore the supplied images. Do not output a wireframe, flat canvas mockup, or placeholder.'\n  });\n  const referenceImages = Array.isArray(body.referenceImageFiles) ? body.referenceImageFiles : [];\n  const assetImages = Array.isArray(body.userAssetFiles) ? body.userAssetFiles : [];\n  if (!existingTemplateRules) {\n    referenceImages.slice(0, 3).forEach((img, idx) => {\n      parts.push({ text: 'Reference image ' + (idx + 1) + ' for NEW TEMPLATE CREATION: extract color palette, typography feel, texture, composition, spacing, effects, and visual design language.' });\n      const part = toInlinePart(img); if (part) parts.push(part);\n    });\n  }\n  assetImages.slice(0, 4).forEach((img, idx) => {\n    parts.push({ text: 'Resource/asset seed image ' + (idx + 1) + ': use this as the actual subject/content seed in the generated design while applying the selected/extracted template style.' });\n    const part = toInlinePart(img); if (part) parts.push(part);\n  });\n  return {\n    contents: [{ parts }],\n    generationConfig: { responseModalities: ['TEXT','IMAGE'] }\n  };\n})() }}",
-        "options": {
-          "timeout": 120000
-        }
+        "jsCode": "const body = $('Design Request Webhook').first().json.body || {};\nconst fetchDataUrl = async (url) => {\n  const response = await this.helpers.httpRequest({ method: 'GET', url, encoding: 'base64', json: false, timeout: 120000 });\n  const mime = url.match(/\\.jpe?g($|\\?)/i) ? 'image/jpeg' : url.match(/\\.webp($|\\?)/i) ? 'image/webp' : 'image/png';\n  return 'data:' + mime + ';base64,' + response;\n};\nconst flowise = $('Call Flowise Layout Rules').first().json || {};\nconst caption = body.caption || (body.userCopyTexts || [''])[0] || '';\nconst designType = body.designType || 'design';\nconst generationMode = body.generationMode || 'single';\nconst templateMode = body.templateMode || 'ad-hoc-generation';\nconst templateRules = flowise.layoutRules || flowise.json || flowise.text || flowise.answer || flowise;\nconst parts = [];\nconst toInlinePart = (dataUrl) => {\n  if (!dataUrl || typeof dataUrl !== 'string') return null;\n  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);\n  if (!match) return null;\n  return { inlineData: { mimeType: match[1], data: match[2] } };\n};\nconst assetImages = Array.isArray(body.userAssetFiles) ? [...body.userAssetFiles] : [];\nfor (const url of (Array.isArray(body.userAssetUrls) ? body.userAssetUrls : [])) {\n  try { assetImages.push(await fetchDataUrl(url)); } catch (e) {}\n}\nparts.push({ text: 'TASK: create a finished ' + designType + ' design by applying TEMPLATE RULES to the uploaded SUBJECT ASSET IMAGE(S). Output structure: ' + generationMode + '. CRITICAL ASSET RULE: this is an image-composition/editing task, not a generic illustration task. The uploaded asset image pixels/visual subject must be plainly visible in the final image as the hero cutout, framed photo panel, product/portrait card, or main collage element. Preserve the asset subject category, pose/silhouette, clothing/product details, colors, and recognizable visual content. Do NOT invent replacement people/products. Do NOT use template reference images as final subjects. If a perfect stylistic blend is hard, place the asset as a clear foreground photo/card over the template-inspired background. Render the exact caption text only: \"' + caption + '\". Return a finished image, not JSON. Template mode: ' + templateMode + '. Rich template rules JSON: ' + JSON.stringify(templateRules) });\nassetImages.slice(0, 4).forEach((img, idx) => {\n  parts.push({ text: 'SUBJECT_ASSET_IMAGE_' + (idx + 1) + ' \u2014 MANDATORY PIXEL-VISIBLE INPUT. The final image must visibly contain this uploaded asset. A reviewer comparing source asset to output must be able to point to where it appears. Do not substitute a generic person/object. Use it as the main foreground subject or as a clear photo panel if needed.' });\n  const part = toInlinePart(img); if (part) parts.push(part);\n});\nparts.push({ text: assetImages.length\n  ? 'FINAL CHECK BEFORE ANSWERING WITH IMAGE: Does the output visibly include the uploaded SUBJECT_ASSET_IMAGE as a main element? If not, revise the image so the asset is obvious. Caption must remain exact: \"' + caption + '\".'\n  : 'No user asset image was supplied; generate from caption and template rules only.' });\nconst request = { contents: [{ parts }], generationConfig: { responseModalities: ['TEXT','IMAGE'] } };\ntry {\n  const apiKey = $env.GEMINI_API_KEY;\n  const model = $env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image';\n  if (!apiKey) return [{ json: { error: { message: 'GEMINI_API_KEY is not configured' }, candidates: [], model } }];\n  const json = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey,\n    headers: { 'Content-Type': 'application/json' },\n    body: request,\n    json: true,\n    timeout: 180000\n  });\n  json.httpStatus = 200;\n  json.httpOk = true;\n  json.model = model;\n  json.assetImageCount = assetImages.length;\n  return [{ json }];\n} catch (error) {\n  return [{ json: { error: { message: error.message }, candidates: [], httpStatus: 0, httpOk: false, model: $env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image', assetImageCount: assetImages.length } }];\n}"
       },
       "id": "55555555-eeee-4eee-8eee-555555555555",
       "name": "Call Gemini Image Model",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         580,
         240
@@ -144,22 +83,11 @@
         ]
       ]
     },
-    "Log Orchestration Evidence": {
-      "main": [
-        [
-          {
-            "node": "Return Orchestrated Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Call Gemini Image Model": {
       "main": [
         [
           {
-            "node": "Log Orchestration Evidence",
+            "node": "Return Orchestrated Result",
             "type": "main",
             "index": 0
           }

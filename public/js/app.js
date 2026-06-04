@@ -10,7 +10,9 @@ const state = {
   assetFilesBase64: [],
   generatedImageBlob: null,
   activeDesignType: 'YouTube Thumbnail',
+  generationMode: 'single',
   history: [],
+  templates: [],
   canvasZoom: 1.0,
   isGridVisible: true,
   currentDesign: null,
@@ -21,6 +23,20 @@ window.deconstructState = state;
 
 // API Endpoint configuration
 const API_URL = window.location.origin;
+
+function siblingServiceOrigin(port) {
+  const url = new URL(window.location.origin);
+  url.port = String(port);
+  url.pathname = '';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+}
+
+const SERVICE_URLS = {
+  n8n: siblingServiceOrigin(5678),
+  flowise: siblingServiceOrigin(3000)
+};
 
 function resolveReachableUrl(url) {
   if (!url || typeof url !== 'string') return url;
@@ -40,6 +56,7 @@ const tabRegisterBtn = document.getElementById('tab-register-btn');
 const usernameDisplay = document.getElementById('username-display');
 const userInitials = document.getElementById('user-initials');
 const designHistoryList = document.getElementById('design-history-list');
+const templateList = document.getElementById('template-list');
 const designConfigForm = document.getElementById('design-config-form');
 const canvasRatioBadge = document.getElementById('canvas-ratio-badge');
 const downloadBtn = document.getElementById('download-design-btn');
@@ -48,6 +65,7 @@ const renderCanvas = document.getElementById('render-canvas');
 const ctx = renderCanvas.getContext('2d');
 const coordinateGridOverlay = document.getElementById('coordinate-grid-overlay');
 const canvasContainer = document.getElementById('canvas-container');
+const generationEvidencePill = document.getElementById('generation-evidence-pill');
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -57,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showAuthView();
   }
   updateDesignTypeSelection();
+  updateGenerationModeSelection();
   setupFileDropZones();
   ensureUiFeedbackElements();
   if (state.token) loadIntegrationStatus();
@@ -77,6 +96,7 @@ function showDashboardView() {
   usernameDisplay.textContent = state.username;
   userInitials.textContent = state.username.substring(0, 2).toUpperCase();
   loadHistory();
+  loadTemplates();
   loadIntegrationStatus();
 }
 
@@ -96,7 +116,7 @@ async function checkTokenAndInitialize() {
     }
   } catch (err) {
     console.error('Failed to verify token', err);
-    showDashboardView(); // Offline fallback for resilience
+    showAuthView();
   }
 }
 
@@ -179,6 +199,7 @@ function handleLogout() {
   state.token = null;
   state.username = null;
   state.history = [];
+  state.templates = [];
   showAuthView();
 }
 
@@ -238,6 +259,17 @@ function handleFileSelected(type, input) {
   });
 }
 
+
+function updateGenerationModeSelection() {
+  const activeRadio = document.querySelector('input[name="generationMode"]:checked');
+  if (!activeRadio) return;
+  state.generationMode = activeRadio.value;
+  document.querySelectorAll('.generation-mode-card').forEach(card => {
+    const radio = card.querySelector('input');
+    card.classList.toggle('active', Boolean(radio?.checked));
+  });
+}
+
 function updateDesignTypeSelection() {
   const activeRadio = document.querySelector('input[name="designType"]:checked');
   if (!activeRadio) return;
@@ -291,6 +323,7 @@ async function handleGenerateDesign(e) {
 
   const payload = {
     designType: state.activeDesignType,
+    generationMode: state.generationMode,
     userCopyTexts: headlines,
     brandPalette: [bgColorVal, accentColorVal, textHighlightColorVal, '#ffffff'],
     referenceImageUrls: state.activeRefSource === 'url' ? [resolveReachableUrl(refUrlVal)] : [],
@@ -322,7 +355,7 @@ async function handleGenerateDesign(e) {
 
     if (!res.ok) {
       const errPayload = await res.json().catch(() => ({}));
-      throw new Error(errPayload.message || 'API request failed');
+      throw new Error(errPayload.message || 'We could not generate the image right now. Please try again.');
     }
     const data = await res.json();
 
@@ -350,15 +383,22 @@ async function handleGenerateDesign(e) {
     await drawDesignOnCanvas(data.design, firstSlide.userAssetFile || firstSlide.userAssetUrl);
     
     hideLoader();
+    const model = data.design?.generation?.realImageGeneration?.model || 'Gemini image model';
+    const quality = data.design?.generation?.templateRuleQuality;
+    if (generationEvidencePill) {
+      generationEvidencePill.classList.remove('muted');
+      generationEvidencePill.innerHTML = `<i class="fa-solid fa-check"></i> ${escapeHtml(model)} · ${state.totalSlidesCount} slide${state.totalSlidesCount === 1 ? '' : 's'} · ${quality?.score || 0}/8 rule checks`;
+    }
     showToast(`Generated ${state.totalSlidesCount === 1 ? 'one design' : state.totalSlidesCount + ' slides'} via backend pipeline.`, 'success');
     loadHistory(); // Refresh history panel
+    loadTemplates(); // Refresh user-scoped saved templates
     loadIntegrationStatus();
   } catch (err) {
-    console.error(err);
+    console.warn('Image generation request failed.');
     const message = err.name === 'AbortError'
-      ? 'Generation timed out after 3 minutes. Check n8n/Gemini workflow logs.'
+      ? 'Image generation timed out. Please try again in a moment.'
       : (err.message || 'Please check server connections.');
-    showToast(`Generation error: ${message}`, 'error');
+    showToast(message, 'error');
     hideLoader();
   }
 }
@@ -398,111 +438,118 @@ async function animateStep(stepIdx, duration) {
 }
 
 // ----------------------------------------------------
-// Dynamic Canvas Compositing Engine (Client-Side Rendering)
+// User-scoped Template Memory Panel
 // ----------------------------------------------------
 
-async function drawDesignOnCanvas(design, userAssetImageSource) {
-  // Get active slide schema or default to root schema
-  const slide = design.slides ? design.slides[state.activeSlideIndex] : design;
-  const schema = slide.layoutSchema;
-  
-  // Set dimensions based on extracted schema layout sizes
-  renderCanvas.width = schema.canvasSize.width;
-  renderCanvas.height = schema.canvasSize.height;
-  
-  if (slide.generatedImageUrl) {
-    const generated = await loadImage(slide.generatedImageUrl);
-    ctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
-    ctx.drawImage(generated, 0, 0, renderCanvas.width, renderCanvas.height);
-    coordinateGridOverlay.innerHTML = '';
-    downloadBtn.removeAttribute('disabled');
+async function loadTemplates() {
+  if (!state.token || !templateList) return;
+  try {
+    const res = await fetch(`${API_URL}/api/templates`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (res.ok) {
+      state.templates = await res.json();
+      renderTemplateList();
+    }
+  } catch (err) {
+    console.error('Failed to load saved templates', err);
+  }
+}
+
+function renderTemplateList() {
+  if (!templateList) return;
+  templateList.innerHTML = '';
+
+  if (state.templates.length === 0) {
+    templateList.innerHTML = `
+      <div class="history-empty compact-empty">
+        <i class="fa-regular fa-clone"></i>
+        <p>No saved templates yet</p>
+      </div>`;
     return;
   }
 
-  // Draw Background Layer
-  const grad = ctx.createLinearGradient(0, 0, renderCanvas.width, renderCanvas.height);
-  grad.addColorStop(0, schema.palette[0] || '#0f172a');
-  grad.addColorStop(1, adjustColorBrightness(schema.palette[0] || '#0f172a', -20));
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+  state.templates.forEach(template => {
+    const card = document.createElement('div');
+    card.className = 'history-card template-card';
 
-  // Overlay visual abstract design grids/circles in background
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < renderCanvas.width; i += 80) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, renderCanvas.height);
-    ctx.stroke();
-  }
-  for (let j = 0; j < renderCanvas.height; j += 80) {
-    ctx.beginPath();
-    ctx.moveTo(0, j);
-    ctx.lineTo(renderCanvas.width, j);
-    ctx.stroke();
-  }
-  
-  // Accent brand gradient blob
-  ctx.globalAlpha = 0.15;
-  const radialGrad = ctx.createRadialGradient(
-    renderCanvas.width / 2, renderCanvas.height / 2, 100, 
-    renderCanvas.width / 2, renderCanvas.height / 2, renderCanvas.width / 2
-  );
-  radialGrad.addColorStop(0, schema.palette[1] || '#6366f1');
-  radialGrad.addColorStop(1, 'transparent');
-  ctx.fillStyle = radialGrad;
-  ctx.beginPath();
-  ctx.arc(renderCanvas.width / 2, renderCanvas.height / 2, renderCanvas.width / 2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.globalAlpha = 1.0; // Reset
+    const formattedDate = new Date(template.createdAt).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
-  // Draw one or more user assets. This is what keeps a thumbnail with Bob + Ninja Man as ONE composite design.
-  const assets = Array.isArray(schema.assets) && schema.assets.length
-    ? schema.assets
-    : (userAssetImageSource ? [{ ...schema.assetConfig, source: userAssetImageSource }] : []);
+    card.innerHTML = `
+      <div class="history-header">
+        <span class="history-type">${escapeHtml(template.designType || 'Template')}</span>
+        <button type="button" class="template-delete-btn" title="Delete this template" aria-label="Delete template ${escapeHtml(template.templateId)}">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </div>
+      <div class="history-copy">${escapeHtml(template.summary || template.templateId)}</div>
+      <div class="template-meta">${escapeHtml(template.mode || 'single')} · ${formattedDate}</div>
+    `;
 
-  if (assets.length > 0) {
-    for (const asset of assets) {
-      await drawAssetLayer(asset, schema.palette, design.designType);
-    }
-  } else if (schema.assetConfig && schema.assetConfig.width > 0) {
-    drawFallbackAssetCard(schema.assetConfig, schema.palette);
-  }
+    card.querySelector('.template-delete-btn').addEventListener('click', (event) => {
+      event.stopPropagation();
+      deleteTemplate(template.templateId);
+    });
 
-  // Draw Headline Typography Text Layer
-  ctx.fillStyle = schema.textConfig.color;
-  ctx.font = `${schema.textConfig.fontWeight} ${schema.textConfig.fontSize}px ${schema.textConfig.fontFamily}`;
-  ctx.textAlign = schema.textConfig.align;
-  ctx.textBaseline = 'middle';
-
-  const textLines = wrapText(ctx, slide.userCopyText, schema.textConfig.maxWidth);
-  let currentY = schema.textConfig.y - ((textLines.length - 1) * schema.textConfig.lineHeight) / 2;
-
-  textLines.forEach(line => {
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4;
-    ctx.strokeText(line, schema.textConfig.x, currentY);
-    
-    ctx.fillText(line, schema.textConfig.x, currentY);
-    currentY += schema.textConfig.lineHeight;
+    templateList.appendChild(card);
   });
+}
 
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
+async function deleteTemplate(templateId) {
+  if (!templateId) return;
+  const ok = window.confirm('Delete this saved template? Existing generated designs will stay in your history.');
+  if (!ok) return;
 
-  // Draw overlay coordinate guidelines if toggled
-  drawCoordinateOverlayGrid(slide);
+  try {
+    const res = await fetch(`${API_URL}/api/templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Delete failed');
 
-  // Enable download action
+    state.templates = state.templates.filter(template => template.templateId !== templateId);
+    renderTemplateList();
+    showToast('Template deleted.', 'success');
+  } catch (err) {
+    showToast(`Could not delete template: ${err.message}`, 'error');
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// ----------------------------------------------------
+// Dynamic Canvas Compositing Engine (Client-Side Rendering)
+// ----------------------------------------------------
+
+async function drawDesignOnCanvas(design) {
+  const slide = design.slides ? design.slides[state.activeSlideIndex] : design;
+  if (!slide?.generatedImageUrl) {
+    throw new Error('The generated image is not ready yet. Please try again.');
+  }
+
+  const schema = slide.layoutSchema || {};
+  const canvasSize = schema.canvasSize || { width: 1280, height: 720 };
+  renderCanvas.width = canvasSize.width;
+  renderCanvas.height = canvasSize.height;
+
+  const generated = await loadImage(slide.generatedImageUrl);
+  ctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
+  ctx.drawImage(generated, 0, 0, renderCanvas.width, renderCanvas.height);
+  if (coordinateGridOverlay) coordinateGridOverlay.innerHTML = '';
   downloadBtn.removeAttribute('disabled');
 }
 
@@ -515,33 +562,6 @@ function loadImage(src) {
     img.onerror = (e) => reject(e);
     img.src = resolveReachableUrl(src);
   });
-}
-
-function drawRoundedRect(c, x, y, width, height, radius) {
-  c.beginPath();
-  c.moveTo(x + radius, y);
-  c.lineTo(x + width - radius, y);
-  c.quadraticCurveTo(x + width, y, x + width, y + radius);
-  c.lineTo(x + width, y + height - radius);
-  c.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  c.lineTo(x + radius, y + height);
-  c.quadraticCurveTo(x, y + height, x, y + height - radius);
-  c.lineTo(x, y + radius);
-  c.quadraticCurveTo(x, y, x + radius, y);
-  c.closePath();
-}
-
-function drawFallbackAssetCard(config, palette) {
-  ctx.fillStyle = palette[2] || '#10b981';
-  drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
-  ctx.fill();
-  
-  // Draw generic camera/image icon in center
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 48px "Font Awesome 6 Free"';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('', config.x + config.width/2, config.y + config.height/2); // FA image icon
 }
 
 function wrapText(c, text, maxWidth) {
@@ -593,6 +613,7 @@ function adjustColorBrightness(hex, percent) {
 
 function drawCoordinateOverlayGrid(design) {
   // Clear the transparent HTML overlay
+  if (!coordinateGridOverlay) return;
   coordinateGridOverlay.innerHTML = '';
   
   if (!state.isGridVisible) return;
@@ -646,7 +667,7 @@ function createTextMarkerElement(left, top, w, h, label) {
   textLabel.textContent = label;
   
   box.appendChild(textLabel);
-  coordinateGridOverlay.appendChild(box);
+  if (coordinateGridOverlay) coordinateGridOverlay.appendChild(box);
 }
 
 function toggleCoordinateGrid() {
@@ -761,6 +782,9 @@ function loadHistoricalDesign(design) {
     document.getElementById('headline-input').value = design.userCopyText;
   }
   
+  const modeRadio = document.querySelector(`input[name="generationMode"][value="${design.mode === 'carousel' ? 'carousel' : 'single'}"]`);
+  if (modeRadio) { modeRadio.checked = true; updateGenerationModeSelection(); }
+
   // Set active design type radio button
   const radios = document.getElementsByName('designType');
   radios.forEach(radio => {
@@ -869,53 +893,21 @@ async function loadIntegrationStatus() {
   const panel = document.getElementById('integration-status-panel');
   try {
     const res = await fetch(`${API_URL}/api/integrations/status`, {
-      headers: { 'Authorization': `Bearer ${state.token}` }
+      headers: {
+        'Authorization': `Bearer ${state.token}`,
+        'X-Public-N8n-Url': SERVICE_URLS.n8n,
+        'X-Public-Flowise-Url': SERVICE_URLS.flowise
+      }
     });
     if (!res.ok) throw new Error('status unavailable');
     const data = await res.json();
     const entries = Object.values(data).map(item => {
       const ok = item.ok || (item.name === 'pinecone' && item.configured);
-      return `<span class="status-pill ${ok ? 'ok' : 'warn'}">${item.name}: ${ok ? 'ready' : 'offline'}</span>`;
+      const publicUrl = item.publicUrl ? ` data-url="${escapeHtml(item.publicUrl)}" title="${escapeHtml(item.publicUrl)}"` : '';
+      return `<span class="status-pill ${ok ? 'ok' : 'warn'}"${publicUrl}>${item.name}: ${ok ? 'ready' : 'offline'}</span>`;
     }).join('');
     panel.innerHTML = entries;
   } catch (error) {
     panel.innerHTML = '<span class="status-pill warn">integration status unavailable</span>';
-  }
-}
-
-async function drawAssetLayer(asset, palette, designType) {
-  const config = asset;
-  if (!config || !config.width || !config.height) return;
-  try {
-    const img = await loadImage(config.source);
-    ctx.save();
-    const circular = config.borderRadius >= Math.min(config.width, config.height) / 2 || designType === 'Twitter Banner';
-    if (circular) {
-      ctx.beginPath();
-      ctx.arc(config.x + config.width / 2, config.y + config.height / 2, Math.min(config.width, config.height) / 2, 0, Math.PI * 2);
-      ctx.clip();
-    } else {
-      drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
-      ctx.clip();
-    }
-    const scale = Math.max(config.width / img.width, config.height / img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
-    ctx.drawImage(img, config.x + (config.width - w) / 2, config.y + (config.height - h) / 2, w, h);
-    ctx.restore();
-
-    ctx.strokeStyle = palette[1] || '#6366f1';
-    ctx.lineWidth = 4;
-    if (circular) {
-      ctx.beginPath();
-      ctx.arc(config.x + config.width / 2, config.y + config.height / 2, Math.min(config.width, config.height) / 2, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      drawRoundedRect(ctx, config.x, config.y, config.width, config.height, config.borderRadius || 16);
-      ctx.stroke();
-    }
-  } catch (err) {
-    console.warn('Could not load asset image, drawing fallback', err);
-    drawFallbackAssetCard(config, palette);
   }
 }
