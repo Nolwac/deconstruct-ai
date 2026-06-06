@@ -10,14 +10,17 @@
     "verify:mcp": "node verify_mcp.js",
     "verify:ui": "node verify_ui_static.js",
     "verify:browser": "node verify_browser.js",
-    "dev:all": "node start_all.js"
+    "dev:all": "node start_all.js",
+    "verify:template-rules": "node verify_template_rules.js",
+    "verify:n8n-native": "node verify_native_n8n_workflow.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "playwright": "^1.60.0"

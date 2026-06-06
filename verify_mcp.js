@@ -90,7 +90,7 @@ async function runMcpTests() {
   console.log('\nTest 5: Generate design schema through MCP HTTP...');
   const schemaCall = await fetchJson(`${MCP_URL}/mcp/design-schema`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ designType: 'YouTube Thumbnail', userCopyTexts: ['See Legends!'], referenceImageFiles: ['sample'], userAssetFiles: ['bob', 'ninja'], brandPalette: ['#111827', '#b11226', '#f8fafc', '#ffffff'] })
+    body: JSON.stringify({ designType: 'YouTube Thumbnail', userCopyTexts: ['See Legends!'], referenceImageFiles: ['sample'], userAssetFiles: ['bob', 'ninja'] })
   });
   if (schemaCall.res.status !== 200 || schemaCall.data.design.mode !== 'single' || schemaCall.data.design.slides.length !== 1 || schemaCall.data.design.slides[0].assets.length !== 2) {
     throw new Error(`MCP schema generation failed: ${JSON.stringify(schemaCall.data)}`);

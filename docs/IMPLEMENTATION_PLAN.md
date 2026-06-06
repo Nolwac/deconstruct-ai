@@ -1,7 +1,7 @@
 # Deconstruct AI Implementation Plan
 
 ## Goal
-Ship a working API-first design-generation platform that accepts one or more reference images, one or more asset images, and supplied text; classifies single-design vs carousel intent; produces AI-generated final images through n8n/Flowise/Gemini only; integrates with Pinecone and local MCP-style tools for metadata/audit support; and is verified with automated and live browser tests.
+Ship a working API-first design-generation platform that accepts one or more reference images, one or more asset images, and supplied text; classifies single-design vs carousel intent; produces AI-generated final images through native n8n/Gemini only; stores/retrieves complete template rules in PostgreSQL by exact `template_id`, integrates local MCP-style tools for metadata/audit support, and is verified with automated and live browser tests.
 
 ## Constraints
 - Do not burn the limited Gemini API budget during development. Keep AI image generation disabled unless explicitly enabled, and never substitute local synthesis for final output.
@@ -14,10 +14,10 @@ Ship a working API-first design-generation platform that accepts one or more ref
    - Add an explicit generation pipeline layer under `server/services`.
    - Fix slide-count logic: YouTube thumbnail stays one slide even with multiple asset images; carousel formats can produce multiple slides.
    - Store rich Flowise/Gemini orchestration metadata, template-rule evidence, generated image URLs, and warnings without client-side image-construction schemas.
-   - Persist designs and local template/style memory.
+   - Persist designs and authoritative plain multi-line template/style rules keyed by exact `template_id` and `user_id`.
 
 2. **Integration services**
-   - Add Pinecone REST upsert/query helpers with safe fallback when unavailable.
+   - Add PostgreSQL template-rule storage/retrieval helpers using plain multi-line `TEXT`, with local file fallback only when PostgreSQL is unconfigured or unavailable.
    - Add Flowise and n8n HTTP clients with local health/status exposure.
    - Add Gemini adapter behind `ENABLE_REAL_IMAGE_GENERATION=true` to protect budget.
    - Update Docker Compose/env examples for n8n + Flowise + app + MCP server.
@@ -38,4 +38,4 @@ Ship a working API-first design-generation platform that accepts one or more ref
 
 6. **Finalization**
    - Commit each verified milestone.
-   - Start n8n/Flowise/MCP/app services where possible and document exact URLs/status.
+   - Start n8n/MCP/app/PostgreSQL services where possible and document exact URLs/status. Flowise is optional legacy/reference infrastructure, not part of the primary path.

@@ -1,0 +1,168 @@
+{
+  "updatedAt": "2026-06-05T09:45:41.688Z",
+  "createdAt": "2026-06-04T09:49:55.778Z",
+  "id": "deconstructTemplateRuleCreator",
+  "name": "Deconstruct AI Template Rule Creator",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deconstruct-ai-template-rules",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "id": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+      "name": "Design Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        240
+      ],
+      "webhookId": "deconstruct-ai-generate"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview"
+        },
+        "text": "={{ 'Analyze ONLY the uploaded reference design image. Return a plain multi-line template rule document, NOT JSON and NOT a JavaScript object. Markdown headings, bullet lists, and markdown tables are allowed because the UI will render the rule document for humans. Target format: ' + ($('Design Request Webhook').first().json.body.designType || 'design') + '. Output structure: ' + ($('Design Request Webhook').first().json.body.generationMode || 'single') + '. Include titled sections: DESIGN IDENTITY, CANVAS, VISUAL TREATMENT, TYPOGRAPHY, COPY PLACEMENT, COLOR SYSTEM, ASSET RULES, COMPOSITION, BUILD STEPS, DO / DONT, PRE-PUBLISH CHECKLIST, QUALITY NOTES. Be concrete about dimensions, coordinates/zones, font weights, colors, line breaks, image treatment, constraints, and checklist. Do not generate the final design. Do not include base64 data.' }}",
+        "inputType": "url",
+        "imageUrls": "={{ (($('Design Request Webhook').first().json.body.referenceImageUrls || [])[0]) }}",
+        "simplify": true,
+        "options": {
+          "maxOutputTokens": 4096
+        }
+      },
+      "id": "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+      "name": "Generate Rule Text with Gemini",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        360,
+        240
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ha26bIjKk2V6XpKI",
+          "name": "Gemini API (Deconstruct AI)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source",
+              "name": "source",
+              "type": "string",
+              "value": "n8n-template-rule-creator"
+            },
+            {
+              "id": "n8nWorkflow",
+              "name": "n8nWorkflow",
+              "type": "string",
+              "value": "Deconstruct AI Template Rule Creator"
+            },
+            {
+              "id": "templateRuleText",
+              "name": "templateRuleText",
+              "type": "string",
+              "value": "={{ (($json.content && $json.content.parts && $json.content.parts[0] && $json.content.parts[0].text) ? $json.content.parts[0].text : ($json.text || '')).trim() }}"
+            },
+            {
+              "id": "templateRuleQuality",
+              "name": "templateRuleQuality",
+              "type": "object",
+              "value": "={{ { storageFormat: 'plain-multiline-text', characterCount: ((($json.content && $json.content.parts && $json.content.parts[0] && $json.content.parts[0].text) ? $json.content.parts[0].text : ($json.text || '')) + '').trim().length, lineCount: ((($json.content && $json.content.parts && $json.content.parts[0] && $json.content.parts[0].text) ? $json.content.parts[0].text : ($json.text || '')) + '').trim().split('\\n').length } }}"
+            },
+            {
+              "id": "evidence",
+              "name": "evidence",
+              "type": "object",
+              "value": "={{ { n8n: true, templateRules: true, nativeGeminiNodes: true, directGeminiApi: false, codeNodesInPrimaryPath: 0, noFallbacks: true, inputImage: 'referenceImageUrl', timestamp: new Date().toISOString() } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cccccccc-3333-4333-8333-cccccccccccc",
+      "name": "Return Native Orchestration Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Design Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Generate Rule Text with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Rule Text with Gemini": {
+      "main": [
+        [
+          {
+            "node": "Return Native Orchestration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "d57b4d98-edd8-41d6-b876-c1942a0f6e06",
+  "activeVersionId": "d57b4d98-edd8-41d6-b876-c1942a0f6e06",
+  "versionCounter": 33,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-04T09:49:55.787Z",
+      "createdAt": "2026-06-04T09:49:55.787Z",
+      "role": "workflow:owner",
+      "workflowId": "deconstructLiveOrchestrator",
+      "projectId": "S7Ux4mHFf5m39ksI",
+      "project": {
+        "updatedAt": "2026-06-04T10:57:23.456Z",
+        "createdAt": "2026-06-03T15:09:31.014Z",
+        "id": "S7Ux4mHFf5m39ksI",
+        "name": "Livinus Nwafor <livinus-n8n@deconstruct.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "a8ce86c7-b70c-4b37-b2ef-4fdc7fedc245"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

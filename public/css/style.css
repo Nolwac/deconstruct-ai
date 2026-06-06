@@ -551,7 +551,25 @@ body {
 }
 
 .template-card {
-  cursor: default;
+  cursor: pointer;
+}
+
+.template-card.active {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.18);
+}
+
+.template-card.loading {
+  border-color: var(--accent-secondary);
+  background: rgba(16, 185, 129, 0.08);
+  opacity: 0.86;
+}
+
+.template-card.loading .history-type::after {
+  content: ' · loading';
+  color: var(--text-muted);
+  text-transform: none;
 }
 
 .template-card .history-copy {
@@ -581,6 +599,74 @@ body {
   margin-top: 8px;
   font-size: 10px;
   color: var(--text-muted);
+}
+
+.template-detail-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.template-detail-card.muted {
+  color: var(--text-muted);
+  border-style: dashed;
+}
+
+.template-rule-viewer {
+  margin-top: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.38);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.template-rule-viewer h1,
+.template-rule-viewer h2,
+.template-rule-viewer h3,
+.template-rule-viewer h4 {
+  color: var(--text-primary);
+  margin: 16px 0 8px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.template-rule-viewer h1:first-child,
+.template-rule-viewer h2:first-child,
+.template-rule-viewer h3:first-child,
+.template-rule-viewer h4:first-child {
+  margin-top: 0;
+}
+
+.template-rule-viewer p {
+  margin: 8px 0;
+}
+
+.template-rule-viewer ul {
+  margin: 8px 0 8px 18px;
+}
+
+.template-rule-viewer li {
+  margin: 4px 0;
+}
+
+.template-rule-viewer table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.template-rule-viewer td {
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
 }
 
 /* Workspace Layout */

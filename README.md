@@ -2,7 +2,7 @@
 
 An AI-powered graphic design automation tool that extracts structural layout guidelines, design rules, and visual style schemas from reference designs (thumbnails, carousels, flyers) to generate cohesive new designs using your own assets (images, copies, etc.).
 
-This project is built using a hybrid architecture integrating **n8n** (Orchestration & Workflow Engine), **Flowise** (AI Multi-Agent & LLM Logic), **Pinecone** (Vector Memory Store), and **MCP** (Model Context Protocol).
+This project is built using a hybrid architecture integrating **n8n** (Orchestration & Workflow Engine), **Flowise** (AI Multi-Agent & LLM Logic), **PostgreSQL** (authoritative template-rule storage keyed by `template_id`), and **MCP** (Model Context Protocol).
 
 ---
 
@@ -41,17 +41,17 @@ This project is built using a hybrid architecture integrating **n8n** (Orchestra
 |   |                           (Gemini / GPT Vision)                           |
 |   |                                     |                                     |
 |   |                                     v                                     |
-|   |                           { Is Template ID Present? }                     |
+|   |                           { Exact Template ID Exists? }                   |
 |   |                            /                       \                      |
 |   |                         (No)                      (Yes)                   |
 |   |                          /                           \                    |
 |   |                         v                             v                   |
-|   |               [ LLM Extract Style ]          [ Pinecone Index Query ]     |
-|   |               (Generates JSON Rule)          (Fetches existing rule)      |
+|   |               [ Vision Extract Full Rules ]  [ PostgreSQL Exact Lookup ]  |
+|   |               (Generates plain text rule)    (Fetches complete rule text) |
 |   |                         |                             |                   |
 |   |                         v                             |                   |
-|   |               [ Pinecone Vector Store ] <-------------+                   |
-|   |               (Upsert new JSON rule)                                      |
+|   |               [ PostgreSQL template_rules ] <---------+                   |
+|   |               (Upsert new multi-line TEXT rule)                           |
 |   +---------------------------------------------------------------------------+
 |                                         |
 |                                         | (6) Passes compiled prompt text
@@ -110,15 +110,17 @@ cp .env.example .env.local
 
 Local development disables AI image generation by default:
 - `ENABLE_REAL_IMAGE_GENERATION=false` prevents accidental paid model/image calls.
-- When image generation is enabled, final images must come from the n8n/Flowise/Gemini workflow only; the app must not synthesize final images locally.
+- When image generation is enabled, final images must come from the native n8n/Gemini workflow only; the app must not synthesize final images locally.
 - `ENABLE_EXTERNAL_INTEGRATION_CHECKS=false` keeps verification local unless explicitly enabled.
-- Pinecone credentials are optional. Without them, the app reports local memory-only mode.
+- PostgreSQL is the authoritative template-rule store. Rules are saved as plain multi-line `TEXT` and retrieved by exact `template_id` plus `user_id`; vector search is not used for rule retrieval.
 
 ### 2. Start the local stack with Docker Compose
 
 ```bash
-docker compose up app mcp-server flowise n8n
+docker compose up app postgres mcp-server n8n
 ```
+
+Flowise can remain available for legacy experiments, but it is not required by the primary generation path.
 
 Local URLs:
 - App: `http://localhost:5000`
@@ -126,26 +128,25 @@ Local URLs:
 - Flowise: `http://localhost:3000`
 - n8n: `http://localhost:5678`
 
-The app container uses Docker-internal URLs for service-to-service calls (`mcp-server`, `flowise`, `n8n`) while the same ports remain exposed on localhost for browser/manual setup.
+The app container uses Docker-internal URLs for service-to-service calls (`mcp-server`, `n8n`, and PostgreSQL) while the same ports remain exposed on localhost for browser/manual setup.
 
-### 3. Import Flowise and n8n assets
-
-Flowise:
-1. Open `http://localhost:3000`.
-2. Click **Add New** ➔ **Load Chatflow** and upload `flowise/deconstruct-ai-flowise-chatflow.json`.
-3. Configure optional credentials only when you intentionally enable real model/Pinecone calls.
-4. Save the chatflow and copy its Chatflow ID into `.env.local` as `FLOWISE_CHATFLOW_ID`.
+### 3. Import the native n8n workflow
 
 n8n:
 1. Open `http://localhost:5678`.
-2. Import or paste `n8n/deconstruct-ai-n8n-workflow.json`.
-3. Set Flowise prediction URL to `http://flowise:3000/api/v1/prediction/<FLOWISE_CHATFLOW_ID>` when running inside Docker, or `http://localhost:3000/api/v1/prediction/<FLOWISE_CHATFLOW_ID>` when running n8n on the host.
+2. Import or paste `n8n/deconstruct-ai-native-gemini-orchestrator.json` or `n8n/deconstruct-ai-live-orchestrator.json`.
+3. Configure the native Google Gemini credential used by the Gemini analyze/edit nodes.
 4. Keep paid image/model credential nodes disabled until real generation is explicitly approved.
+
+Flowise:
+- The primary workflow bypasses Flowise. The legacy `flowise/deconstruct-ai-flowise-chatflow.json` remains only as historical/reference material and must not be used for template-rule retrieval.
 
 ### 4. Local verification
 
 ```bash
 npm test
+npm run verify:template-rules
+npm run verify:n8n-native
 npm run verify:integrations
 ```
 
@@ -175,4 +176,4 @@ To generate a design, send a POST payload to the n8n **Webhook Start Node** endp
 }
 ```
 
-The system will route, analyze, save/load from Pinecone, construct a detailed prompt, generate the asset, and return a binary `image/png` response directly to your WebUI.
+The system routes through native n8n/Gemini nodes, analyzes the reference into plain multi-line rules, saves/loads complete rules through PostgreSQL by exact `template_id`, constructs a detailed prompt, generates the asset, and returns JSON containing the generated image for the WebUI to render.

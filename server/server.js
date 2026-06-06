@@ -6,8 +6,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const loadEnv = require('./config/loadEnv');
 const { getIntegrationStatus } = require('./services/integrations');
-const { generateDesignSchema } = require('./services/generationPipeline');
-const { readJson, writeJson } = require('./services/storage');
+const { createTemplateRuleSchema, generateDesignSchema } = require('./services/generationPipeline');
+const { listTemplatesForUser, getTemplateForUser, deleteTemplateForUser } = require('./services/templateRuleStore');
 loadEnv(path.join(__dirname, '..'));
 
 const app = express();
@@ -199,12 +199,16 @@ app.post('/api/designs/generate', authenticateToken, async (req, res) => {
       message: error.message,
       stack: error.stack
     });
-    const imageRefusal = /without returning a generated image|IMAGE_OTHER|could not generate the image|no image after fallback/i.test(error.message || '');
-    res.status(imageRefusal ? 422 : 500).json({
-      message: imageRefusal
-        ? 'The image provider accepted the request but did not return an image. This is a provider-side no-image response, not proof that your reference or asset images are invalid. We have logged the failure details for inspection.'
-        : 'We could not generate the image right now. Please try again in a moment.',
-      code: imageRefusal ? 'IMAGE_PROVIDER_RETURNED_NO_IMAGE' : 'IMAGE_GENERATION_FAILED',
+    const message = error.message || '';
+    const imageRefusal = /without returning a generated image|IMAGE_OTHER|could not generate the image/i.test(message);
+    const inputError = /Select a saved template rule|real asset image is required|Template rule .* was not found|has no rule text/i.test(message);
+    res.status(inputError ? 400 : (imageRefusal ? 422 : 500)).json({
+      message: inputError
+        ? message
+        : (imageRefusal
+          ? 'The image provider accepted the request but did not return an image. The request failed honestly without using substitute assets or substitute rules.'
+          : 'We could not generate the image right now. Please try again in a moment.'),
+      code: inputError ? 'DESIGN_GENERATION_INPUT_INVALID' : (imageRefusal ? 'IMAGE_PROVIDER_RETURNED_NO_IMAGE' : 'IMAGE_GENERATION_FAILED'),
       failureId
     });
   }
@@ -224,19 +228,10 @@ app.get('/api/designs/history', authenticateToken, (req, res) => {
 // User-scoped Template Memory Routes
 // ----------------------------------------------------
 
-const userOwnsTemplate = (template, userId, designs = []) => {
-  if (!template || !template.templateId) return false;
-  if (template.userId === userId) return true;
-  // Backward-compatible ownership inference for older template-memory entries
-  // created before userId was stored on template records.
-  return designs.some(design => design.userId === userId && design.templateId === template.templateId);
-};
-
-app.get('/api/templates', authenticateToken, (req, res) => {
-  const templates = readJson(TEMPLATE_MEMORY_FILE, []);
+app.get('/api/templates', authenticateToken, async (req, res) => {
   const designs = readDb(DESIGNS_FILE);
+  const { templates } = await listTemplatesForUser(req.user.id, designs);
   const userTemplates = templates
-    .filter(template => userOwnsTemplate(template, req.user.id, designs))
     .map(template => ({
       templateId: template.templateId,
       designType: template.designType,
@@ -245,25 +240,63 @@ app.get('/api/templates', authenticateToken, (req, res) => {
       source: template.source,
       referenceImageCount: template.referenceImageCount || 0,
       assetImageCount: template.assetImageCount || 0,
-      createdAt: template.createdAt
+      templateRuleQuality: template.ruleText ? require('./services/templateRuleStore').assessTemplateRuleQuality(template.ruleText) : null,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt
     }))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   res.status(200).json(userTemplates);
 });
 
-app.delete('/api/templates/:templateId', authenticateToken, (req, res) => {
-  const { templateId } = req.params;
-  const templates = readJson(TEMPLATE_MEMORY_FILE, []);
-  const designs = readDb(DESIGNS_FILE);
-  const target = templates.find(template => template.templateId === templateId);
-
-  if (!target || !userOwnsTemplate(target, req.user.id, designs)) {
-    return res.status(404).json({ message: 'Template not found for this user.' });
+app.post('/api/templates/generate', authenticateToken, async (req, res) => {
+  const { designType } = req.body;
+  if (!designType) {
+    return res.status(400).json({ message: 'Design type is required to create template rules.' });
   }
 
-  const remaining = templates.filter(template => template.templateId !== templateId);
-  writeJson(TEMPLATE_MEMORY_FILE, remaining);
+  try {
+    const result = await createTemplateRuleSchema(req.body, req.user);
+    logToMcp('template_rule_created', {
+      templateId: result.template.templateId,
+      userId: req.user.id,
+      designType: result.template.designType,
+      referenceImageCount: result.template.referenceImageCount
+    });
+    res.status(201).json({ message: 'Template rules created successfully.', ...result });
+  } catch (error) {
+    const failureId = 'tpl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    console.error('[Template Rule Pipeline] Failed:', {
+      failureId,
+      userId: req.user.id,
+      message: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({
+      message: 'We could not create template rules right now. Please try again in a moment.',
+      code: 'TEMPLATE_RULE_GENERATION_FAILED',
+      failureId
+    });
+  }
+});
+
+app.get('/api/templates/:templateId', authenticateToken, async (req, res) => {
+  const { templateId } = req.params;
+  const result = await getTemplateForUser(templateId, req.user.id);
+  if (!result.template) {
+    return res.status(404).json({ message: 'Template not found for this user.' });
+  }
+  res.status(200).json({ template: result.template });
+});
+
+app.delete('/api/templates/:templateId', authenticateToken, async (req, res) => {
+  const { templateId } = req.params;
+  const designs = readDb(DESIGNS_FILE);
+  const result = await deleteTemplateForUser(templateId, req.user.id, designs);
+
+  if (!result.deleted) {
+    return res.status(404).json({ message: 'Template not found for this user.' });
+  }
 
   logToMcp('template_deleted', { templateId, userId: req.user.id });
   res.status(200).json({ message: 'Template deleted successfully.', templateId });

@@ -180,7 +180,6 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             designType: { type: 'string' },
             userCopyTexts: { type: 'array', items: { type: 'string' } },
-            brandPalette: { type: 'array', items: { type: 'string' } },
             referenceImageFiles: { type: 'array', items: { type: 'string' } },
             userAssetFiles: { type: 'array', items: { type: 'string' } }
           },
@@ -189,7 +188,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'mcp_get_integration_status',
-        description: 'Return n8n, Flowise, Pinecone, and MCP HTTP wiring status.',
+        description: 'Return n8n, Flowise, PostgreSQL template-rule store, and MCP HTTP wiring status.',
         inputSchema: { type: 'object', properties: {} }
       }
     ]

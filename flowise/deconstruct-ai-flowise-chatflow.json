@@ -2,7 +2,7 @@
   "nodes": [
     {
       "id": "visionLLM_0",
-      "label": "ChatOpenAI / Gemini Vision",
+      "label": "Gemini Vision Rule Extractor",
       "name": "chatOpenAI",
       "version": 4.0,
       "type": "ChatOpenAI",
@@ -11,28 +11,13 @@
         "y": 200
       },
       "inputs": {
-        "modelName": "gpt-4o",
-        "temperature": 0.1
-      }
-    },
-    {
-      "id": "pinecone_0",
-      "label": "Pinecone Vector Store",
-      "name": "pinecone",
-      "version": 1.0,
-      "type": "Pinecone",
-      "position": {
-        "x": 480,
-        "y": 350
-      },
-      "inputs": {
-        "pineconeIndex": "graphics-templates",
-        "namespace": "rulesets"
+        "modelName": "gemini-3.1-pro-image",
+        "temperature": 0.05
       }
     },
     {
       "id": "customAgent_0",
-      "label": "Layout Analysis & Router Agent",
+      "label": "Reference-Faithful Template Rule Agent",
       "name": "customAgent",
       "version": 1.0,
       "type": "CustomAgent",
@@ -41,14 +26,14 @@
         "y": 50
       },
       "inputs": {
-        "systemMessage": "You are an expert layout extraction mechanism. If a template ID is provided, query the Pinecone Vector Store node to fetch the stored style rules. If no template ID is provided, analyze the reference image structure. Extract: Color palette arrays, Layout coordinate bounding structures, and typographical sizes. Generate a clean Styliza Rule Schema JSON object. Pass the resulting schema to the Layout Optimizer node.",
-        "tools": ["pinecone_0"],
+        "systemMessage": "You are a reference-faithful visual deconstruction agent. PostgreSQL exact template-id retrieval is handled by the application before this chatflow; never use vector search and never mix rules across template IDs. If existingTemplateRules are provided in the request, return those rules unchanged except for validation metadata. If no existingTemplateRules are provided, analyze every supplied reference image and generate a complete JSON rule set covering: designIdentity, canvas/aspect/safe zones, composition grid, focal hierarchy, subject placement, background/texture/lighting, color system with exact palettes, typography families/weights/sizes/case/spacing, copy placement and effects, asset integration rules, visual treatments, shadows/glow/strokes/overlays, realism constraints, slide/carousel consistency, build steps, do/don't constraints, and a prePublishChecklist. The rules must be detailed enough for another model to recreate the reference design closely without seeing the reference image again. Avoid cartoon/anime/illustration defaults unless the reference clearly uses them; otherwise specify realistic commercial design rendering.",
+        "tools": [],
         "model": "visionLLM_0"
       }
     },
     {
       "id": "layoutOptimizer_0",
-      "label": "Layout Optimizer LLM",
+      "label": "Rule Completeness Validator",
       "name": "structuredOutputNode",
       "version": 2.0,
       "type": "StructuredOutput",
@@ -57,7 +42,7 @@
         "y": 180
       },
       "inputs": {
-        "systemPrompt": "You are a graphic layout balance optimizer. Verify that the incoming layout rules schema holds sound spatial values, grid proportions, and valid hex keys. Fix overlapping coordinates, then output the final verified JSON schema string without markdown wrapper syntax.",
+        "systemPrompt": "Validate the template rule JSON for completeness and reference fidelity. Reject shallow rules. Ensure every major facet of the reference design is represented with concrete, reusable instructions. Output only the final verified JSON schema string without markdown wrapper syntax.",
         "model": "visionLLM_0"
       }
     }
@@ -68,12 +53,6 @@
       "sourceHandle": "chatOpenAI",
       "target": "customAgent_0",
       "targetHandle": "model"
-    },
-    {
-      "source": "pinecone_0",
-      "sourceHandle": "pinecone",
-      "target": "customAgent_0",
-      "targetHandle": "tools"
     },
     {
       "source": "customAgent_0",

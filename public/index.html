@@ -120,7 +120,7 @@
     <main class="workspace">
       <div class="workspace-header">
         <h1>Design Workspace</h1>
-        <p>Analyze reference structures and generate AI-only designs from your text/assets.</p>
+        <p>Create reusable template rules from reference images, then generate designs from selected rules and your assets.</p>
       </div>
 
       <div class="workspace-grid">
@@ -182,9 +182,18 @@
               </div>
             </div>
 
-            <!-- 3. Style Reference Image -->
+            <!-- 3. Template Rule Selection -->
             <div class="form-group border-top">
-              <label class="section-label">1. Style Reference Design Template</label>
+              <label class="section-label">1. Selected Template Rule</label>
+              <div id="selected-template-card" class="template-detail-card muted">
+                No template selected. Create one from a reference image or select an existing template from the sidebar.
+              </div>
+              <div id="template-rule-viewer" class="template-rule-viewer hidden"></div>
+            </div>
+
+            <!-- 4. Style Reference Image for Template Creation -->
+            <div class="form-group border-top">
+              <label class="section-label">2. Create Template Rule from Reference Image</label>
               <div class="input-source-toggle">
                 <button type="button" id="ref-toggle-file" class="toggle-btn active" onclick="switchSourceInput('ref', 'file')">Upload File</button>
                 <button type="button" id="ref-toggle-url" class="toggle-btn" onclick="switchSourceInput('ref', 'url')">Image URL</button>
@@ -199,11 +208,14 @@
               <div id="ref-url-container" class="form-input-container hidden">
                 <input type="url" id="ref-url-input" class="text-input" placeholder="https://example.com/layout-sample.png">
               </div>
+              <button type="button" id="create-template-rule-btn" class="btn btn-secondary btn-block" onclick="handleCreateTemplateRule()">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Create / Save Template Rule
+              </button>
             </div>
 
-            <!-- 4. User Asset Image -->
+            <!-- 5. User Asset Image -->
             <div class="form-group border-top">
-              <label class="section-label">2. Your Asset (Product/Avatar)</label>
+              <label class="section-label">3. Your Asset (Product/Avatar)</label>
               <div class="input-source-toggle">
                 <button type="button" id="asset-toggle-file" class="toggle-btn active" onclick="switchSourceInput('asset', 'file')">Upload File</button>
                 <button type="button" id="asset-toggle-url" class="toggle-btn" onclick="switchSourceInput('asset', 'url')">Image URL</button>
@@ -220,35 +232,15 @@
               </div>
             </div>
 
-            <!-- 5. Typography Caption Text -->
+            <!-- 6. Typography Caption Text -->
             <div class="form-group border-top">
-              <label for="headline-input" class="section-label">5. Target Text Copy (Headline)</label>
+              <label for="headline-input" class="section-label">4. Target Text Copy (Headline)</label>
               <textarea id="headline-input" class="text-area-input" rows="3" placeholder="Enter slide headlines separated by | for each slide (e.g. Slide 1 Headline | Slide 2 Headline | Slide 3 Headline)..." required></textarea>
-            </div>
-
-            <!-- 6. Brand Color Palette Customizer -->
-            <div class="form-group border-top">
-              <label class="section-label">6. Brand Palette Customizer (Optional)</label>
-              <p class="helper-text">Select background and theme highlights or let the model extract it.</p>
-              <div class="color-picker-row">
-                <div class="color-picker-item">
-                  <input type="color" id="color-bg" value="#0f172a">
-                  <span>Background</span>
-                </div>
-                <div class="color-picker-item">
-                  <input type="color" id="color-accent" value="#6366f1">
-                  <span>Accent</span>
-                </div>
-                <div class="color-picker-item">
-                  <input type="color" id="color-highlight" value="#10b981">
-                  <span>Text Highlight</span>
-                </div>
-              </div>
             </div>
 
             <!-- Submit Action -->
             <button type="submit" class="btn btn-primary btn-block submit-action-btn">
-              <i class="fa-solid fa-microchip"></i> Deconstruct & Generate
+              <i class="fa-solid fa-microchip"></i> Generate from Selected Template
             </button>
           </form>
         </section>
@@ -305,8 +297,8 @@
       <div class="spinner-container">
         <div class="custom-spinner"></div>
       </div>
-      <h3>Deconstructing & Reassembling Layout...</h3>
-      <p class="loader-subtext">Running unified orchestration via n8n & Flowise chatflows</p>
+      <h3>Generating with Selected Template Rules...</h3>
+      <p class="loader-subtext">Running native n8n image generation with stored rules and uploaded assets</p>
       
       <!-- Stepper Phases -->
       <ul class="stepper-list">
@@ -316,7 +308,7 @@
         </li>
         <li id="step-1" class="step-item">
           <i class="fa-regular fa-circle step-icon"></i>
-          <span>Calling n8n orchestration and Flowise layout rules</span>
+          <span>Retrieving selected template rules and preparing asset image input</span>
         </li>
         <li id="step-2" class="step-item">
           <i class="fa-regular fa-circle step-icon"></i>
@@ -324,7 +316,7 @@
         </li>
         <li id="step-3" class="step-item">
           <i class="fa-regular fa-circle step-icon"></i>
-          <span>Saving memory and rendering the returned image</span>
+          <span>Saving and rendering the returned image</span>
         </li>
       </ul>
     </div>

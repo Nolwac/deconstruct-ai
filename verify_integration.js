@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const loadEnv = require('./server/config/loadEnv');
+const { getPostgresStatus } = require('./server/services/templateRuleStore');
 
 loadEnv(__dirname);
 
 const externalChecksEnabled = process.env.ENABLE_EXTERNAL_INTEGRATION_CHECKS === 'true' || process.argv.includes('--external');
-const BASE_URL = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
 const MCP_URL = process.env.MCP_HTTP_URL || 'http://localhost:5001';
 const N8N_URL = process.env.N8N_BASE_URL || 'http://localhost:5678';
 const FLOWISE_URL = process.env.FLOWISE_BASE_URL || 'http://localhost:3000';
@@ -23,26 +23,6 @@ async function fetchStatus(name, url) {
   }
 }
 
-function localPineconeStatus() {
-  return {
-    name: 'pinecone',
-    configured: Boolean(process.env.PINECONE_API_KEY),
-    ok: Boolean(process.env.PINECONE_API_KEY),
-    mode: externalChecksEnabled ? 'external-checks-enabled' : 'local-fallback',
-    indexHostConfigured: Boolean(process.env.PINECONE_INDEX_HOST),
-    indexName: process.env.PINECONE_INDEX_NAME || 'graphics-templates',
-    namespace: process.env.PINECONE_NAMESPACE || 'rulesets'
-  };
-}
-
-async function verifyExternalPinecone() {
-  if (!process.env.PINECONE_API_KEY) return { ...localPineconeStatus(), ok: false, error: 'PINECONE_API_KEY missing' };
-  const res = await fetch('https://api.pinecone.io/indexes', {
-    headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'X-Pinecone-API-Version': '2025-04' }
-  });
-  return { name: 'pinecone', configured: true, ok: res.ok, status: res.status, mode: 'external-read-only' };
-}
-
 async function main() {
   console.log('--- LOCAL INTEGRATION WIRING CHECK ---');
   console.log('External API checks:', externalChecksEnabled ? 'enabled (read-only)' : 'disabled');
@@ -53,17 +33,21 @@ async function main() {
   }
   console.log('✔ Required setup files present.');
 
-  const [mcp, n8n, flowise] = await Promise.all([
+  const [mcp, n8n, flowise, postgres] = await Promise.all([
     fetchStatus('mcp-http', `${MCP_URL.replace(/\/$/, '')}/mcp/status`),
     fetchStatus('n8n', `${N8N_URL.replace(/\/$/, '')}/healthz`),
-    fetchStatus('flowise', `${FLOWISE_URL.replace(/\/$/, '')}/api/v1/ping`)
+    fetchStatus('flowise', `${FLOWISE_URL.replace(/\/$/, '')}/api/v1/ping`),
+    getPostgresStatus()
   ]);
-  const pinecone = externalChecksEnabled ? await verifyExternalPinecone() : localPineconeStatus();
 
-  const statuses = [mcp, n8n, flowise, pinecone];
+  const statuses = [mcp, n8n, flowise, postgres];
   for (const status of statuses) {
     const detail = status.ok ? `ok${status.status ? ` (${status.status})` : ''}` : `not ready${status.error ? `: ${status.error}` : ''}`;
     console.log(`- ${status.name}: ${detail}`);
+  }
+
+  if (postgres.configured && !postgres.ok) {
+    throw new Error(`PostgreSQL is configured but unavailable: ${postgres.error}`);
   }
 
   console.log('✔ Wiring check completed without paid API calls by default.');
